@@ -77,48 +77,49 @@ fn fields_handler(map: &PDFillerMap, form: &mut Form) {
 
 pub fn compile_documents(map: &PDFillerMap, documents: &Vec<Document>) -> HandlerCompilerResult {
     for document in documents.iter() {
-        match Form::load(&document.file) {
-            Ok(mut form) => {
-                fields_handler(map, &mut form);
-
-                if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
-                    match fs::create_dir_all(PATH_COMPILED) {
-                        Ok(_) => match form.save(&compiled_filename) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                sentry::capture_error(&e);
-
-                                return HandlerCompilerResult::Error(format!(
-                                    "Error {:#?} saving a PDF file, aborted.",
-                                    e
-                                ));
-                            }
-                        },
-                        Err(e) => {
-                            sentry::capture_error(&e);
-
-                            return HandlerCompilerResult::Error(format!(
-                                "Error {:#?} saving a PDF file, aborted.",
-                                e
-                            ));
-                        }
-                    }
-                } else {
-                    return HandlerCompilerResult::Error(
-                        "Error saving a PDF file, aborted.".into(),
-                    );
-                }
-            }
-            Err(e) => {
-                return HandlerCompilerResult::Error(format!(
-                    "Error {:#?} fetching a PDF file, aborted.",
-                    e
-                ));
-            }
+        if let HandlerCompilerResult::Error(message) = compile_document(map, &document) {
+            return HandlerCompilerResult::Error(message);
         }
     }
 
     HandlerCompilerResult::Success
+}
+
+pub fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompilerResult {
+    match Form::load(&document.file) {
+        Ok(mut form) => {
+            fields_handler(map, &mut form);
+
+            if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
+                match fs::create_dir_all(PATH_COMPILED) {
+                    Ok(_) => match form.save(&compiled_filename) {
+                        Ok(_) => HandlerCompilerResult::Success,
+                        Err(e) => {
+                            sentry::capture_error(&e);
+
+                            HandlerCompilerResult::Error(format!(
+                                "Error {:#?} saving a PDF file, aborted.",
+                                e
+                            ))
+                        }
+                    },
+                    Err(e) => {
+                        sentry::capture_error(&e);
+
+                        HandlerCompilerResult::Error(format!(
+                            "Error {:#?} saving a PDF file, aborted.",
+                            e
+                        ))
+                    }
+                }
+            } else {
+                HandlerCompilerResult::Error("Error saving a PDF file, aborted.".into())
+            }
+        }
+        Err(e) => {
+            HandlerCompilerResult::Error(format!("Error {:#?} fetching a PDF file, aborted.", e))
+        }
+    }
 }
 
 pub fn zip_compiled_documents(documents: &Vec<Document>) -> ZipCompilerResult {
