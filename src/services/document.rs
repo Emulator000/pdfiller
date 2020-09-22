@@ -33,8 +33,8 @@ pub async fn get_documents_by_token(
     data: web::Data<Data>,
     token: web::Path<String>,
 ) -> impl Responder {
-    if let Some(reviews) = data.redis.get_all_by::<Document, _>(&token.0).await {
-        HttpResponse::Ok().json(reviews)
+    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+        HttpResponse::Ok().json(documents)
     } else {
         HttpResponse::NoContent().json(WsError {
             error: "No documents found!".into(),
@@ -53,8 +53,10 @@ pub async fn post_document(mut payload: Multipart, data: web::Data<Data>) -> imp
                 Some("file") => match content_type.get_filename() {
                     Some(filename) => match fs::create_dir_all(PATH) {
                         Ok(_) => {
-                            let file = file_path(&filename);
-                            match web::block(|| fs::File::create(file)).await {
+                            let local_filepath = file_path(&filename);
+                            filepath = Some(local_filepath.clone());
+
+                            match web::block(|| fs::File::create(local_filepath)).await {
                                 Ok(mut file) => {
                                     while let Some(chunk) = field.next().await {
                                         match chunk {
@@ -70,22 +72,24 @@ pub async fn post_document(mut payload: Multipart, data: web::Data<Data>) -> imp
                                                     sentry::capture_error(&e);
 
                                                     return HttpResponse::InternalServerError().json(
-                                                        WsError {
-                                                            error: format!("An error occurred during upload: {:#?}", e),
-                                                        },
-                                                    );
+                                                            WsError {
+                                                                error: format!("An error occurred during upload: {:#?}", e),
+                                                            },
+                                                        );
                                                 }
                                             },
                                             Err(e) => {
                                                 sentry::capture_error(&e);
+
+                                                filepath = None;
                                             }
                                         }
                                     }
-
-                                    filepath = Some(file_path(&filename));
                                 }
                                 Err(e) => {
                                     sentry::capture_error(&e);
+
+                                    filepath = None;
                                 }
                             }
                         }

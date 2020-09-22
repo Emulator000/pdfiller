@@ -7,6 +7,7 @@ use futures_lite::stream::StreamExt;
 use uuid::Uuid;
 
 pub const PATH: &'static str = "./tmp/";
+pub const PATH_COMPILED: &'static str = "./tmp/compiled/";
 
 pub async fn read_chunked_string(field: &mut Field) -> String {
     let mut string = String::new();
