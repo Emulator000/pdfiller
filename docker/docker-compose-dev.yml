@@ -1,0 +1,5 @@
+version: '3.7'
+services:
+  antistorm:
+    volumes:
+      - "./target/debug/pdfiller:/home/pdfiller"

@@ -1,0 +1,47 @@
+version: '3.8'
+services:
+  pdfiller:
+    build: docker/images/pdfiller
+    container_name: pf_core
+    working_dir: /home
+    volumes:
+      - "./config/config.toml:/home/config/config.toml"
+      - "./target/debug/pdfiller:/home/pdfiller"
+      - "./docker/scripts/pdfiller/start.sh:/home/pdfiller.sh"
+      - "./logs:/home/logs"
+    ulimits:
+      nproc: 1000000
+      nofile:
+        soft: 1000000
+        hard: 1000000
+    env_file: .env
+    command: >
+      /bin/sh -c "chmod a+x pdfiller && chmod a+x pdfiller.sh && ./pdfiller.sh"
+    restart: always
+    expose:
+      - $PF_WS_PORT
+    depends_on:
+      - redis
+      - nginx
+
+  redis:
+    build: ./docker/images/redis
+    container_name: pf_redis
+    expose:
+      - $PF_REDIS_PORT
+    ports:
+      - $PF_REDIS_PUBLIC_PORT:$PF_REDIS_PORT
+
+  nginx:
+    build: ./docker/images/web
+    container_name: pf_nginx
+    volumes:
+      - "./docker/config/nginx:/etc/nginx"
+    ulimits:
+      nproc: 1000000
+      nofile:
+        soft: 1000000
+        hard: 1000000
+    ports:
+      - $PF_WS_PUBLIC_PORT:$PF_WS_PORT
+    restart: always

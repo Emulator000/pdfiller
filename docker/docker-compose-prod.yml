@@ -1,0 +1,5 @@
+version: '3.7'
+services:
+  antistorm:
+    volumes:
+      - "./target/release/pdfiller:/home/pdfiller"

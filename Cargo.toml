@@ -1,9 +1,21 @@
 [package]
-name = "pdfiller"
-version = "0.1.0"
-authors = ["Emulator000 <dario.cancelliere@facile.it>"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+    name = "pdfiller"
+    version = "0.1.0"
+    authors = ["Emulator000 <emulator@hotmail.it>"]
+    edition = "2018"
 
 [dependencies]
+    async-std = "^1.6"
+    actix-web = { version = "^3.0", features = ["rustls"] }
+    actix-rt = "^1.1"
+    redis = "^0.17"
+    serde = "^1.0"
+    serde_derive = "^1.0"
+    serde_json = "^1.0"
+    toml = "^0.5"
+    envsubst = "^0.2"
+    arc-swap = "^0.4"
+    sentry = "^0.20"
+
+    # For static building
+    openssl-sys = { version = "*", features = ["vendored"] }

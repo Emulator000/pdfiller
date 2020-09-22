@@ -1,0 +1,10 @@
+[server]
+    bind_address = "${PF_WS_HOST}"
+    bind_port = ${PF_WS_PORT}
+
+[redis]
+    host = "${PF_REDIS_HOST}"
+    port = ${PF_REDIS_PORT}
+
+[sentry]
+    dsn = "${PF_SENTRY_DSN}"
