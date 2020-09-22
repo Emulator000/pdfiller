@@ -4,7 +4,7 @@ pub mod wrapper;
 
 use std::sync::Arc;
 
-use async_std::sync::RwLock;
+use async_std::sync::{RwLock, RwLockWriteGuard};
 
 use redis::RedisResult;
 
@@ -15,6 +15,7 @@ use crate::redis::models::Model;
 
 #[derive(Clone)]
 pub struct Redis {
+    client: Arc<redis::Client>,
     connection: Arc<RwLock<redis::aio::Connection>>,
     cache: Cache,
 }
@@ -23,25 +24,52 @@ impl Redis {
     const DEFAULT_PORT: u32 = 6379;
 
     pub async fn new(redis_config: &RedisConfig) -> Self {
+        let client = redis::Client::open(format!(
+            "redis://{}:{}",
+            redis_config.host,
+            redis_config.port.unwrap_or(Self::DEFAULT_PORT)
+        ))
+        .unwrap_or_else(|e| panic!("Error {:#?} connecting to {}", e, redis_config.host));
+
         Redis {
             connection: Arc::new(RwLock::new(
-                redis::Client::open(format!(
-                    "redis://{}:{}",
-                    redis_config.host,
-                    redis_config.port.unwrap_or(Self::DEFAULT_PORT)
-                ))
-                .unwrap_or_else(|e| panic!("Error {:#?} connecting to {}", e, redis_config.host))
-                .get_async_connection()
-                .await
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Error {:#?} can't get a Redis connection to {}",
-                        e, redis_config.host
-                    )
-                }),
+                Self::get_connection(&client)
+                    .await
+                    .unwrap_or_else(|e| panic!("Error {:#?} can't get a Redis connection.", e)),
             )),
+            client: Arc::new(client),
             cache: Cache::new(),
         }
+    }
+
+    async fn connection(&self) -> RwLockWriteGuard<'_, redis::aio::Connection> {
+        let connected = redis::cmd("PING")
+            .query_async::<_, String>(&mut *self.connection.write().await)
+            .await
+            .is_ok();
+
+        if connected {
+            self.connection.write().await
+        } else {
+            Logger::log("Recovering a lost Redis connection.");
+
+            match Self::get_connection(&self.client).await {
+                Ok(connection) => {
+                    *self.connection.write().await = connection;
+
+                    self.connection.write().await
+                }
+                Err(e) => {
+                    sentry::capture_error(&e);
+
+                    panic!("Error {:#?} can't get a Redis connection.", e);
+                }
+            }
+        }
+    }
+
+    async fn get_connection(client: &redis::Client) -> RedisResult<redis::aio::Connection> {
+        client.get_async_connection().await
     }
 
     pub async fn insert<T: Model>(&self, model: T) -> RedisResult<()> {
@@ -50,23 +78,20 @@ impl Redis {
                 model.key(),
                 serde_json::to_string(&model).unwrap_or(String::new()),
             ])
-            .query_async(&mut *self.connection.write().await)
+            .query_async(&mut *self.connection().await)
             .await
     }
 
-    pub async fn update_one<T: 'static + Model, S: AsRef<str>>(
-        &self,
-        value: S,
-        model: T,
-    ) -> RedisResult<()> {
-        let key = T::model_key::<T, S>(Some(value));
+    pub async fn update_one<T: 'static + Model>(&self, model: T) -> RedisResult<()> {
+        let key = model.key();
         let result = redis::cmd("SET")
             .arg(&[
                 &key,
                 &serde_json::to_string(&model).unwrap_or(String::new()),
             ])
-            .query_async(&mut *self.connection.write().await)
+            .query_async(&mut *self.connection().await)
             .await;
+
         if result.is_ok() {
             self.cache.set::<T, _>(&key, Some(model)).await;
         }
@@ -76,72 +101,99 @@ impl Redis {
 
     // ToDo: find a way to introduce a cache here!
     pub async fn get<T: Model, S: AsRef<str>>(&self, value: Option<S>) -> Option<Vec<T>> {
-        match redis::cmd("MGET")
-            .arg(&T::model_key::<T, S>(value))
-            .query_async::<_, Vec<_>>(&mut *self.connection.write().await)
+        let key = if let Some(value) = value {
+            format!("{}_*", T::model_key::<T, S>(Some(value)))
+        } else {
+            T::model_key::<T, S>(None)
+        };
+
+        let connection = &mut *self.connection().await;
+        match redis::cmd("KEYS")
+            .arg(&key)
+            .query_async::<_, Vec<String>>(connection)
             .await
         {
             Ok(res) => {
-                let deserialized: Vec<_> = res
-                    .iter()
-                    .map(|value: &String| serde_json::from_str::<T>(&value))
-                    .collect();
-
                 let mut results = Vec::new();
-                for deserialize in deserialized {
-                    match deserialize {
-                        Ok(res) => {
-                            results.push(res);
+                for key in res {
+                    match redis::cmd("GET")
+                        .arg(&key)
+                        .query_async::<_, String>(connection)
+                        .await
+                    {
+                        Ok(res) => match serde_json::from_str::<T>(&res) {
+                            Ok(res) => {
+                                results.push(res);
+                            }
+                            _ => {}
+                        },
+                        Err(e) => {
+                            sentry::capture_error(&e);
+
+                            Logger::log(format!(
+                                "Error getting {} with key {}: {:#?}",
+                                T::name(),
+                                &key,
+                                e
+                            ));
                         }
-                        _ => {}
                     }
                 }
 
                 Some(results)
             }
-            Err(_) => None,
+            Err(e) => {
+                sentry::capture_error(&e);
+
+                Logger::log(format!(
+                    "Error getting keys with pattern {}: {:#?}",
+                    &key, e
+                ));
+
+                None
+            }
         }
     }
 
-    pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
-        let key = T::model_key::<T, S>(Some(value));
-        if let Some(value) = self.cache.get::<T, _>(&key).await {
-            value
-        } else {
-            match redis::cmd("GET")
-                .arg(&key)
-                .query_async::<_, String>(&mut *self.connection.write().await)
-                .await
-            {
-                Ok(res) => match serde_json::from_str::<T>(&res) {
-                    Ok(res) => {
-                        self.cache.set::<T, _>(&key, Some(res)).await;
-                    }
-                    _ => {}
-                },
-                Err(e) => {
-                    sentry::capture_error(&e);
+    // pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
+    //     let key = T::model_key::<T, S>(Some(value));
+    //     if let Some(value) = self.cache.get::<T, _>(&key).await {
+    //         value
+    //     } else {
+    //         match redis::cmd("GET")
+    //             .arg(&key)
+    //             .query_async::<_, String>(&mut self.connection().await)
+    //             .await
+    //         {
+    //             Ok(res) => match serde_json::from_str::<T>(&res) {
+    //                 Ok(res) => {
+    //                     self.cache.set::<T, _>(&key, Some(res)).await;
+    //                 }
+    //                 _ => {}
+    //             },
+    //             Err(e) => {
+    //                 sentry::capture_error(&e);
+    //
+    //                 Logger::log(format!(
+    //                     "Error getting {} with key {}: {:#?}",
+    //                     T::name(),
+    //                     &key,
+    //                     e
+    //                 ));
+    //
+    //                 self.cache.set::<T, _>(&key, None).await;
+    //             }
+    //         };
+    //
+    //         self.cache.get::<T, _>(&key).await.unwrap()
+    //     }
+    // }
 
-                    Logger::log(format!(
-                        "Error getting {} with key {}: {:#?}",
-                        T::name(),
-                        &key,
-                        e
-                    ));
-
-                    self.cache.set::<T, _>(&key, None).await;
-                }
-            };
-
-            self.cache.get::<T, _>(&key).await.unwrap()
-        }
-    }
-
-    pub async fn delete_one<T: Model, S: AsRef<str>>(&self, value: S) -> RedisResult<()> {
-        let key = T::model_key::<T, S>(Some(value));
+    pub async fn delete_one<T: Model>(&self, model: T) -> RedisResult<()> {
+        let key = model.key();
         let result = redis::cmd("DEL")
             .arg(&key)
-            .query_async(&mut *self.connection.write().await)
+            .query_async(&mut *self.connection().await)
             .await;
 
         match &result {
@@ -149,6 +201,8 @@ impl Redis {
                 self.cache.del(&key).await;
             }
             Err(e) => {
+                sentry::capture_error(e);
+
                 Logger::log(format!(
                     "Error deleting {} with key {}: {:#?}",
                     T::name(),

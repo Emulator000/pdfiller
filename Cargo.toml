@@ -8,6 +8,8 @@
     async-std = "^1.6"
     actix-web = { version = "^3.0", features = ["rustls"] }
     actix-rt = "^1.1"
+    actix-multipart = "^0.3"
+    futures-lite = "^1.8"
     redis = "^0.17"
     serde = "^1.0"
     serde_derive = "^1.0"
@@ -16,6 +18,8 @@
     envsubst = "^0.2"
     arc-swap = "^0.4"
     sentry = "^0.20"
+    sanitize-filename = "^0.2"
+    uuid = { version = "0.8", features = ["v4"] }
 
     # For static building
     openssl-sys = { version = "*", features = ["vendored"] }

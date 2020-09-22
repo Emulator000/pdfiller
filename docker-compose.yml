@@ -27,8 +27,13 @@ services:
   redis:
     build: ./docker/images/redis
     container_name: pf_redis
+    environment:
+      REDIS_APPENDONLY: "yes"
+      REDIS_APPENDFSYNC: "always"
     expose:
       - $PF_REDIS_PORT
+    volumes:
+      - "./redis:/data"
     ports:
       - $PF_REDIS_PUBLIC_PORT:$PF_REDIS_PORT
 

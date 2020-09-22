@@ -3,7 +3,8 @@
 /target/
 /logs/*
 !/logs/.gitkeep
-/database
+/redis
+/tmp
 **/*.rs.bk
 /*.data
 /*.gz

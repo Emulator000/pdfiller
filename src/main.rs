@@ -6,6 +6,7 @@ mod data;
 mod logger;
 mod redis;
 mod services;
+mod utils;
 
 use actix_web::{
     middleware::{
