@@ -1,8 +1,7 @@
 use crate::redis::models::Model;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Document {
-    pub id: i64,
     pub token: String,
     pub file: String,
 }
@@ -12,7 +11,7 @@ impl Model for Document {
         "document"
     }
 
-    fn id(&self) -> i64 {
-        self.id
+    fn key(&self) -> String {
+        Self::model_key::<Self, _>(Some(&self.token))
     }
 }

@@ -27,11 +27,7 @@ pub async fn get_documents_by_token(
     data: web::Data<Data>,
     token: web::Path<String>,
 ) -> impl Responder {
-    if let Some(reviews) = data
-        .redis
-        .get_all_by::<Document, _>("token", &token.0)
-        .await
-    {
+    if let Some(reviews) = data.redis.get_all_by::<Document, _>(&token.0).await {
         HttpResponse::Ok().json(reviews)
     } else {
         HttpResponse::NoContent().json(WsError {
@@ -40,13 +36,13 @@ pub async fn get_documents_by_token(
     }
 }
 
-#[get("/document/{document_id}")]
-pub async fn get_document(data: web::Data<Data>, document_id: web::Path<i64>) -> impl Responder {
-    if let Some(document) = data.redis.get::<Document>(document_id.0).await {
+#[get("/document/{token}")]
+pub async fn get_document(data: web::Data<Data>, token: web::Path<String>) -> impl Responder {
+    if let Some(document) = data.redis.get::<Document, _>(&token.0).await {
         HttpResponse::Ok().json(document.as_ref())
     } else {
         HttpResponse::NotFound().json(WsError {
-            error: format!("Document {} not found!", document_id.0),
+            error: format!("Document with token {} not found!", &token.0),
         })
     }
 }
@@ -65,18 +61,13 @@ pub async fn post_document(
     match data
         .redis
         .create::<Document>(Document {
-            id: 0,
             token: document_request.token.clone(),
             file: "".to_string(),
         })
         .await
     {
         Ok(_) => {
-            if let Some(document) = data
-                .redis
-                .get_by::<Document, _>("token", &document_request.token)
-                .await
-            {
+            if let Some(document) = data.redis.get::<Document, _>(&document_request.token).await {
                 HttpResponse::Created().json(document.as_ref())
             } else {
                 HttpResponse::NotAcceptable().json(WsError {

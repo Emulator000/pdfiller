@@ -43,7 +43,11 @@ impl Cache {
         }
     }
 
-    pub async fn set<T: 'static + Model, S: AsRef<str>>(&self, key: S, value: Option<T>) -> CacheResult {
+    pub async fn set<T: 'static + Model, S: AsRef<str>>(
+        &self,
+        key: S,
+        value: Option<T>,
+    ) -> CacheResult {
         match self.models.write().await.insert(
             key.as_ref().to_owned(),
             match value {
