@@ -1,11 +1,10 @@
 use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
 
 use serde::Deserialize;
 
 use toml;
+
+use crate::utils::read_file_string;
 
 #[derive(Clone, Deserialize)]
 pub struct Config {
@@ -33,21 +32,12 @@ pub struct SentryConfig {
 
 impl Config {
     pub fn new<S: AsRef<str>>(path: S) -> Self {
-        let path = Path::new(path.as_ref());
-        let display = path.display();
-
-        let mut file = match File::open(&path) {
-            Err(why) => panic!("Couldn't open {}: {}", display, why),
-            Ok(file) => file,
-        };
-
-        let mut configuration = String::new();
-        match file.read_to_string(&mut configuration) {
-            Err(why) => panic!("Couldn't read {}: {}", display, why),
-            Ok(_) => println!("{} loaded correctly.", display),
+        match read_file_string(path.as_ref()) {
+            Some(configuration) => toml::from_str(
+                &envsubst::substitute(configuration, &env::vars().collect()).unwrap(),
+            )
+            .unwrap(),
+            None => panic!("Couldn't open {} file.", path.as_ref()),
         }
-
-        toml::from_str(&envsubst::substitute(configuration, &env::vars().collect()).unwrap())
-            .unwrap()
     }
 }

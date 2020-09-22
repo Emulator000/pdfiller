@@ -2,6 +2,8 @@ mod handler;
 
 use std::str;
 
+use actix_web::dev::BodyEncoding;
+use actix_web::http::ContentEncoding;
 use actix_web::{post, web, HttpResponse, Responder};
 
 use serde::Deserialize;
@@ -9,6 +11,9 @@ use serde_json::Value;
 
 use crate::data::Data;
 use crate::redis::models::document::Document;
+use crate::services::compiler::handler::{
+    zip_compiled_documents, HandlerCompilerResult, ZipCompilerResult,
+};
 use crate::services::WsError;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -31,7 +36,31 @@ pub async fn compile_documents(
                                 data.redis.get_all_by::<Document, _>(&token.0).await
                             {
                                 if !documents.is_empty() {
-                                    handler::compile_documents(&map, &documents)
+                                    match handler::compile_documents(&map, &documents) {
+                                        HandlerCompilerResult::Success => {
+                                            match zip_compiled_documents(&documents) {
+                                                ZipCompilerResult::Success(bytes) => {
+                                                    HttpResponse::Ok()
+                                                        .encoding(ContentEncoding::Identity)
+                                                        .content_type("application/zip")
+                                                        .header("accept-ranges", "bytes")
+                                                        .header(
+                                                            "content-disposition",
+                                                            "attachment; filename=\"pdfs.zip\"",
+                                                        )
+                                                        .body(bytes)
+                                                }
+                                                ZipCompilerResult::Error(message) => {
+                                                    HttpResponse::InternalServerError()
+                                                        .json(WsError { error: message })
+                                                }
+                                            }
+                                        }
+                                        HandlerCompilerResult::Error(message) => {
+                                            HttpResponse::InternalServerError()
+                                                .json(WsError { error: message })
+                                        }
+                                    }
                                 } else {
                                     HttpResponse::NotFound().json(WsError {
                                         error: "No documents found for this token!".into(),
