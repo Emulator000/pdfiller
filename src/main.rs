@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate lopdf;
 
 mod config;
 mod data;

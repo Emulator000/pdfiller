@@ -65,7 +65,7 @@ pub trait CustomDocumentRenumber {
 impl CustomDocumentRenumber for Document {
     fn renumber_objects_from_id(&mut self, new_id: u32) {
         let mut replace = BTreeMap::new();
-        let mut new_id = new_id + 1;
+        let mut new_id = new_id;
         let mut ids = self.objects.keys().cloned().collect::<Vec<ObjectId>>();
         ids.sort();
 
@@ -73,13 +73,19 @@ impl CustomDocumentRenumber for Document {
             if id.0 != new_id {
                 replace.insert(id, (new_id, id.1));
             }
+
             new_id += 1;
         }
 
+        let mut objects = BTreeMap::new();
         for (old, new) in &replace {
             if let Some(object) = self.objects.remove(old) {
-                self.objects.insert(new.clone(), object);
+                objects.insert(new.clone(), object);
             }
+        }
+
+        for (new, object) in objects {
+            self.objects.insert(new, object);
         }
 
         let action = |object: &mut Object| {
@@ -91,6 +97,7 @@ impl CustomDocumentRenumber for Document {
         };
 
         self.traverse_objects(action);
+
         self.max_id = new_id - 1;
     }
 }
