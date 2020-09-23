@@ -12,39 +12,17 @@ use crate::services::WsError;
 use crate::utils::*;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(post_document);
     cfg.service(get_documents);
     cfg.service(get_documents_by_token);
-    cfg.service(post_document);
 }
 
-#[get("/documents")]
-pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
-    if let Some(documents) = data.redis.get_all::<Document>().await {
-        HttpResponse::Ok().json(documents)
-    } else {
-        HttpResponse::NoContent().json(WsError {
-            error: "No documents found!".into(),
-        })
-    }
-}
-
-#[get("/documents/{token}")]
-pub async fn get_documents_by_token(
+#[post("/document/{token}")]
+pub async fn post_document(
     data: web::Data<Data>,
     token: web::Path<String>,
+    mut payload: Multipart,
 ) -> impl Responder {
-    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
-        HttpResponse::Ok().json(documents)
-    } else {
-        HttpResponse::NoContent().json(WsError {
-            error: "No documents found!".into(),
-        })
-    }
-}
-
-#[post("/document")]
-pub async fn post_document(mut payload: Multipart, data: web::Data<Data>) -> impl Responder {
-    let mut token = None;
     let mut filepath = None;
 
     while let Ok(Some(mut field)) = payload.try_next().await {
@@ -99,9 +77,6 @@ pub async fn post_document(mut payload: Multipart, data: web::Data<Data>) -> imp
                     },
                     None => {}
                 },
-                Some("token") => {
-                    token = Some(read_chunked_string(&mut field).await);
-                }
                 Some(_) => {}
                 None => {}
             },
@@ -109,33 +84,52 @@ pub async fn post_document(mut payload: Multipart, data: web::Data<Data>) -> imp
         }
     }
 
-    if token.is_none() || filepath.is_none() {
+    if filepath.is_none() {
         HttpResponse::BadRequest().json(WsError {
-            error: format!("A field is missing."),
+            error: format!("File missing."),
         })
     } else {
-        if let Some(token) = token {
-            if let Some(file) = filepath {
-                let document = Document {
-                    token: token.clone(),
-                    file,
-                };
+        if let Some(file) = filepath {
+            let document = Document {
+                token: token.0,
+                file,
+            };
 
-                match data.redis.create::<Document>(document.clone()).await {
-                    Ok(_) => HttpResponse::Created().json(document),
-                    Err(e) => HttpResponse::InternalServerError().json(WsError {
-                        error: format!("An error occurred: {:#?}", e),
-                    }),
-                }
-            } else {
-                HttpResponse::InternalServerError().json(WsError {
-                    error: format!("An error occurred"),
-                })
+            match data.redis.create::<Document>(document.clone()).await {
+                Ok(_) => HttpResponse::Created().json(document),
+                Err(e) => HttpResponse::InternalServerError().json(WsError {
+                    error: format!("An error occurred: {:#?}", e),
+                }),
             }
         } else {
             HttpResponse::InternalServerError().json(WsError {
                 error: format!("An error occurred"),
             })
         }
+    }
+}
+
+#[get("/documents")]
+pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
+    if let Some(documents) = data.redis.get_all::<Document>().await {
+        HttpResponse::Ok().json(documents)
+    } else {
+        HttpResponse::NoContent().json(WsError {
+            error: "No documents found!".into(),
+        })
+    }
+}
+
+#[get("/documents/{token}")]
+pub async fn get_documents_by_token(
+    data: web::Data<Data>,
+    token: web::Path<String>,
+) -> impl Responder {
+    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+        HttpResponse::Ok().json(documents)
+    } else {
+        HttpResponse::NoContent().json(WsError {
+            error: "No documents found!".into(),
+        })
     }
 }
