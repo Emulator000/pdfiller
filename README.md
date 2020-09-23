@@ -12,7 +12,7 @@ For the standard compile just run `cargo +stable build --release` but if you hav
 ## Commands
 Running:
 
-* `make start_local` starts the local instance (WARNING: you must have a DB running locally)
+* `make start_local` starts the local instance (WARNING: you must have a Redis Server running locally)
 * `make start` for default: starts the dev instance
 * `make start_prod` for the production instance
 
@@ -21,3 +21,12 @@ Running:
 Stopping:
 
 * `make stop` to shutdown all containers
+
+## Not done yet
+
+The following features aren't implemented yet:
+- Image fields with a pattern for the field name
+- Merge all PDFs into one PDF in addition to ZIP option (default)
+- PDF's pages rasterization (flattening)
+- Files caching
+- Temporary files deletion monitor
