@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use pdf_forms::{FieldState, Form, LoadError, ValueError};
 
-use lopdf::{Document as PdfDocument, Object, ObjectId};
+use lopdf::{Document as PdfDocument, Error, Object, ObjectId};
 
 use bytes::Buf;
 
@@ -184,7 +184,40 @@ pub fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompil
                 HandlerCompilerResult::Error("Error saving a PDF file, aborted.".into())
             }
         }
-        Err(e) => HandlerCompilerResult::FillingError(e),
+        Err(e) => match e {
+            FillingError::Load(e) => match e {
+                LoadError::LopdfError(e) => match e {
+                    Error::DictKey => {
+                        if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
+                            match fs::create_dir_all(PATH_COMPILED) {
+                                Ok(_) => {
+                                    let _ = std::fs::copy(&document.file, &compiled_filename);
+
+                                    HandlerCompilerResult::Success
+                                }
+                                Err(e) => {
+                                    sentry::capture_error(&e);
+
+                                    HandlerCompilerResult::Error(format!(
+                                        "Error {:#?} saving a PDF file, aborted.",
+                                        e
+                                    ))
+                                }
+                            }
+                        } else {
+                            HandlerCompilerResult::Error(format!(
+                                "Error saving a PDF file, aborted.",
+                            ))
+                        }
+                    }
+                    _ => {
+                        HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",))
+                    }
+                },
+                _ => HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",)),
+            },
+            _ => HandlerCompilerResult::FillingError(e),
+        },
     }
 }
 
