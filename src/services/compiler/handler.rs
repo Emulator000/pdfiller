@@ -333,22 +333,16 @@ fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<Pdf
     let mut pages: Vec<ObjectId> = Vec::new();
     for document_objects in documents_objects {
         if pages_object.is_none() {
-            pages_object = Some(document.add_object(document_objects.root.1.clone()));
+            pages_object = Some(document_objects.root);
         }
 
-        let pages_object = pages_object.unwrap();
+        let pages_object = pages_object.as_ref().unwrap();
 
         for (object_id, object) in document_objects.objects.iter() {
             match object.type_name().unwrap_or("") {
                 "Catalog" => {
                     if catalog_object.is_none() {
-                        if let Ok(dictionary) = object.as_dict() {
-                            let mut dictionary = dictionary.clone();
-                            dictionary.set("Pages", pages_object);
-
-                            catalog_object =
-                                Some(document.add_object(Object::Dictionary(dictionary)));
-                        }
+                        catalog_object = Some((*object_id, object.clone()));
                     }
                 }
                 _ => {
@@ -357,12 +351,16 @@ fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<Pdf
             }
         }
 
-        for (_, (_, object)) in document_objects.pages.iter() {
+        for (_, (object_id, object)) in document_objects.pages.iter() {
             if let Ok(dictionary) = object.as_dict() {
                 let mut dictionary = dictionary.clone();
-                dictionary.set("Parent", pages_object);
+                dictionary.set("Parent", pages_object.0);
 
-                pages.push(document.add_object(Object::Dictionary(dictionary.clone())));
+                document
+                    .objects
+                    .insert(*object_id, Object::Dictionary(dictionary));
+
+                pages.push(*object_id);
             }
         }
     }
@@ -371,30 +369,37 @@ fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<Pdf
         return None;
     }
 
-    let catalog_id = catalog_object.unwrap();
-    let pages_id = pages_object.unwrap();
+    let catalog_object = catalog_object.unwrap();
+    let pages_object = pages_object.unwrap();
 
-    if let Ok(root) = document.get_object(pages_id) {
-        if let Ok(dictionary) = root.as_dict() {
-            let mut dictionary = dictionary.clone();
-            let count = pages.len();
+    if let Ok(dictionary) = pages_object.1.as_dict() {
+        let count = pages.len();
 
-            dictionary.set(
-                "Kids",
-                pages
-                    .into_iter()
-                    .map(|id| id.into())
-                    .collect::<Vec<Object>>(),
-            );
-            dictionary.set("Count", count as u32);
+        let mut dictionary = dictionary.clone();
+        dictionary.set(
+            "Kids",
+            pages
+                .into_iter()
+                .map(|id| id.into())
+                .collect::<Vec<Object>>(),
+        );
+        dictionary.set("Count", count as u32);
 
-            document
-                .objects
-                .insert(pages_id, Object::Dictionary(dictionary.clone()));
-        }
+        document
+            .objects
+            .insert(pages_object.0, Object::Dictionary(dictionary));
     }
 
-    document.trailer.set("Root", catalog_id);
+    if let Ok(dictionary) = catalog_object.1.as_dict() {
+        let mut dictionary = dictionary.clone();
+        dictionary.set("Pages", pages_object.0);
+
+        document
+            .objects
+            .insert(catalog_object.0, Object::Dictionary(dictionary));
+    }
+
+    document.trailer.set("Root", catalog_object.0);
 
     document.compress();
 
