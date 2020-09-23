@@ -6,7 +6,7 @@ use std::str;
 
 use serde_json::Value;
 
-use pdf_form_ids::{FieldType, Form, LoadError};
+use pdf_forms::{FieldState, Form, LoadError, ValueError};
 
 use bytes::Buf;
 
@@ -22,6 +22,7 @@ const REQUIRED_MARKER: char = '!';
 
 pub enum HandlerCompilerResult {
     Success,
+    FillingError(FillingError),
     Error(String),
 }
 
@@ -30,62 +31,119 @@ pub enum ExportCompilerResult {
     Error(String),
 }
 
-fn fields_handler(map: &PDFillerMap, document: &Document) -> Result<Form, LoadError> {
+#[derive(Debug)]
+pub enum FillingError {
+    Load(LoadError),
+    Value(ValueError),
+    RequiredField(String),
+}
+
+fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<Form, FillingError> {
     match Form::load(&document.file) {
         Ok(mut form) => {
             for (index, name) in form.get_all_names().iter().enumerate() {
                 if let Some(name) = name {
-                    if let Some(value) = map.get(name.trim_start_matches(REQUIRED_MARKER)) {
-                        match form.get_type(index) {
-                            FieldType::Text => {
-                                let _ = form.set_text(index, value.as_str().unwrap_or("").into());
+                    let value = map.get(name.trim_start_matches(REQUIRED_MARKER));
+                    let result = match form.get_state(index) {
+                        FieldState::Text { required, .. } => {
+                            if required && value.is_none() {
+                                Err(FillingError::RequiredField(name.to_owned()))
+                            } else if let Some(value) = value {
+                                form.set_text(index, value.as_str().unwrap_or("").into())
+                                    .map_err(|e| FillingError::Value(e))
+                            } else {
+                                Ok(())
                             }
-                            FieldType::Button => {}
-                            FieldType::Radio => {
-                                let _ = form.set_radio(index, value.as_str().unwrap_or("").into());
-                            }
-                            FieldType::CheckBox => {
-                                let _ = form.set_check_box(index, value.as_bool().unwrap_or(false));
-                            }
-                            FieldType::ListBox => match value.as_array() {
-                                Some(values) => {
-                                    let _ = form.set_list_box(
-                                        index,
-                                        values
-                                            .iter()
-                                            .map(|value| value.as_str().unwrap_or("").to_string())
-                                            .collect(),
-                                    );
-                                }
-                                None => {}
-                            },
-                            FieldType::ComboBox => match value.as_array() {
-                                Some(values) => {
-                                    let _ = form.set_combo_box(
-                                        index,
-                                        values
-                                            .iter()
-                                            .map(|value| value.as_str().unwrap_or("").to_string())
-                                            .collect(),
-                                    );
-                                }
-                                None => {}
-                            },
                         }
+                        FieldState::Radio { required, .. } => {
+                            if required && value.is_none() {
+                                Err(FillingError::RequiredField(name.to_owned()))
+                            } else if let Some(value) = value {
+                                form.set_radio(index, value.as_str().unwrap_or("").into())
+                                    .map_err(|e| FillingError::Value(e))
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        FieldState::CheckBox { required, .. } => {
+                            if required && value.is_none() {
+                                Err(FillingError::RequiredField(name.to_owned()))
+                            } else if let Some(value) = value {
+                                form.set_check_box(index, value.as_bool().unwrap_or(false))
+                                    .map_err(|e| FillingError::Value(e))
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        FieldState::ListBox { required, .. } => {
+                            if required && value.is_none() {
+                                Err(FillingError::RequiredField(name.to_owned()))
+                            } else if let Some(value) = value {
+                                match value.as_array() {
+                                    Some(values) => form
+                                        .set_list_box(
+                                            index,
+                                            values
+                                                .iter()
+                                                .map(|value| {
+                                                    value.as_str().unwrap_or("").to_string()
+                                                })
+                                                .collect(),
+                                        )
+                                        .map_err(|e| FillingError::Value(e)),
+                                    None => Ok(()),
+                                }
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        FieldState::ComboBox { required, .. } => {
+                            if required && value.is_none() {
+                                Err(FillingError::RequiredField(name.to_owned()))
+                            } else if let Some(value) = value {
+                                match value.as_array() {
+                                    Some(values) => form
+                                        .set_combo_box(
+                                            index,
+                                            values
+                                                .iter()
+                                                .map(|value| {
+                                                    value.as_str().unwrap_or("").to_string()
+                                                })
+                                                .collect(),
+                                        )
+                                        .map_err(|e| FillingError::Value(e)),
+                                    None => Ok(()),
+                                }
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        _ => Ok(()),
+                    };
+
+                    if let Err(e) = result {
+                        return Err(e);
                     }
                 }
             }
 
             Ok(form)
         }
-        Err(e) => Err(e),
+        Err(e) => Err(FillingError::Load(e)),
     }
 }
 
 pub fn compile_documents(map: &PDFillerMap, documents: &Vec<Document>) -> HandlerCompilerResult {
     for document in documents.iter() {
-        if let HandlerCompilerResult::Error(message) = compile_document(map, &document) {
-            return HandlerCompilerResult::Error(message);
+        match compile_document(map, &document) {
+            HandlerCompilerResult::FillingError(e) => {
+                return HandlerCompilerResult::FillingError(e);
+            }
+            HandlerCompilerResult::Error(message) => {
+                return HandlerCompilerResult::Error(message);
+            }
+            HandlerCompilerResult::Success => {}
         }
     }
 
@@ -93,7 +151,7 @@ pub fn compile_documents(map: &PDFillerMap, documents: &Vec<Document>) -> Handle
 }
 
 pub fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompilerResult {
-    match fields_handler(map, document) {
+    match fields_filler(map, document) {
         Ok(mut form) => {
             if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
                 match fs::create_dir_all(PATH_COMPILED) {
@@ -121,9 +179,7 @@ pub fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompil
                 HandlerCompilerResult::Error("Error saving a PDF file, aborted.".into())
             }
         }
-        Err(e) => {
-            HandlerCompilerResult::Error(format!("Error {:#?} fetching a PDF file, aborted.", e))
-        }
+        Err(e) => HandlerCompilerResult::FillingError(e),
     }
 }
 
