@@ -58,7 +58,7 @@ pub fn read_file_buf<S: AsRef<str>>(path: S) -> Option<Vec<u8>> {
     }
 }
 
-trait CustomDocumentRenumber {
+pub trait CustomDocumentRenumber {
     fn renumber_objects_from_id(&mut self, new_id: u32);
 }
 

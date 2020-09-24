@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Cursor, SeekFrom};
@@ -9,8 +8,7 @@ use serde_json::Value;
 
 use pdf_forms::{FieldState, Form, LoadError, ValueError};
 
-use lopdf::content::Content;
-use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId, Stream};
+use lopdf::{Document as PdfDocument, Object, ObjectId};
 
 use bytes::Buf;
 
@@ -18,8 +16,8 @@ use zip::write::FileOptions;
 
 use crate::logger::Logger;
 use crate::redis::models::document::Document;
-use crate::utils::read_file_buf;
 use crate::utils::{get_filename, PATH_COMPILED};
+use crate::utils::{read_file_buf, CustomDocumentRenumber};
 
 pub type PDFillerMap = HashMap<String, Value>;
 
@@ -233,53 +231,25 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-struct PdfPageContainer {
-    contents: Vec<Content>,
-    dictionary: Dictionary,
-    objects: BTreeMap<ObjectId, Object>,
-}
-
 pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult {
     let mut first_version = None;
+    let mut max_id = 0;
 
     let mut objects = Vec::new();
     for document in documents.iter() {
         if let Some(ref file_name) = get_compiled_filepath(&document.file) {
             match PdfDocument::load(file_name) {
-                Ok(document) => {
+                Ok(mut document) => {
                     if first_version.is_none() {
                         first_version = Some(document.version.clone());
                     }
 
-                    objects.append(&mut document.get_pages().iter().fold(
-                        Vec::new(),
-                        |mut pages, (_, page_id)| {
-                            let mut contents = Vec::new();
-                            if let Ok(content) = document.get_and_decode_page_content(*page_id) {
-                                contents.push(content);
-                            }
+                    document.prune_objects();
+                    document.renumber_objects_from_id(max_id);
 
-                            match document.get_dictionary(*page_id) {
-                                Ok(dictionary) => {
-                                    pages.push(PdfPageContainer {
-                                        contents,
-                                        dictionary: dictionary.to_owned(),
-                                        objects: document.objects.clone(),
-                                    });
-                                }
-                                Err(e) => {
-                                    sentry::capture_error(&e);
+                    max_id = document.max_id;
 
-                                    Logger::log(format!(
-                                        "Error getting the PDF dictionary: {:#?}",
-                                        e
-                                    ));
-                                }
-                            }
-
-                            pages
-                        },
-                    ));
+                    objects.push(document.objects.clone());
                 }
                 Err(e) => {
                     sentry::capture_error(&e);
@@ -293,36 +263,30 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
     if objects.is_empty() {
         ExportCompilerResult::Error("Cannot extract PDFs pages".into())
     } else {
-        let mut doc = PdfDocument::new();
-        doc.version = first_version.unwrap_or(PDF_VERSION.to_string());
+        let mut document = PdfDocument::new();
+        document.version = first_version.unwrap_or(PDF_VERSION.to_string());
 
-        let pages_id = doc.new_object_id();
+        let pages_id = document.new_object_id();
 
         let mut pages: Vec<ObjectId> = Vec::new();
-        for mut pdf_page in objects {
-            let mut contents_ids: Vec<ObjectId> = Vec::new();
-            for (object_id, object) in pdf_page.objects {
-                // contents_ids.push(doc.add_object(object));
-                // contents_ids.push(object_id);
+        for page in objects {
+            let objects_ids = page
+                .iter()
+                .map(|(object_id, _)| *object_id)
+                .map(|object_id| object_id.into())
+                .collect::<Vec<Object>>();
 
-                doc.objects.insert(object_id, object);
+            for (object_id, object) in page.into_iter().filter(|(_, object)| {
+                !vec!["Page", "Pages", "Catalog"].contains(&object.type_name().unwrap_or(""))
+            }) {
+                document.objects.insert(object_id, object);
             }
 
-            // for content in pdf_page.contents {
-            //     contents_ids
-            //         .push(doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap())));
-            // }
-
-            pdf_page.dictionary.set("Parent", pages_id);
-            // pdf_page.dictionary.set(
-            //     "Contents",
-            //     contents_ids
-            //         .into_iter()
-            //         .map(|id| id.into())
-            //         .collect::<Vec<Object>>(),
-            // );
-
-            pages.push(doc.add_object(pdf_page.dictionary));
+            pages.push(document.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => objects_ids,
+            }));
         }
 
         let count = pages.len() as i32;
@@ -332,19 +296,21 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
             "Count" => count,
         };
 
-        doc.objects.insert(pages_id, Object::Dictionary(pages));
+        document.objects.insert(pages_id, Object::Dictionary(pages));
 
-        let catalog_id = doc.add_object(dictionary! {
+        let catalog_id = document.add_object(dictionary! {
             "Type" => "Catalog",
             "Pages" => pages_id,
         });
 
-        doc.trailer.set("Root", catalog_id);
+        document.trailer.set("Root", catalog_id);
+
+        document.compress();
 
         let buf = Vec::<u8>::new();
         let mut cursor = Cursor::new(buf);
 
-        match doc.save_to(&mut cursor) {
+        match document.save_to(&mut cursor) {
             Ok(_) => {
                 let _ = cursor.seek(SeekFrom::Start(0));
 
