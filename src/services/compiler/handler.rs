@@ -270,22 +270,21 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
 
         let mut pages: Vec<ObjectId> = Vec::new();
         for page in objects {
-            let objects_ids = page
-                .iter()
-                .map(|(object_id, _)| *object_id)
-                .map(|object_id| object_id.into())
-                .collect::<Vec<Object>>();
-
-            for (object_id, object) in page.into_iter().filter(|(_, object)| {
+            let mut objects_ids = Vec::new();
+            for (_, object) in page.into_iter().filter(|(_, object)| {
                 !vec!["Page", "Pages", "Catalog"].contains(&object.type_name().unwrap_or(""))
             }) {
-                document.objects.insert(object_id, object);
+                objects_ids.push(document.add_object(object));
             }
 
             pages.push(document.add_object(dictionary! {
                 "Type" => "Page",
                 "Parent" => pages_id,
-                "Contents" => objects_ids,
+                "Contents" => objects_ids
+                    .iter()
+                    .map(|(object_id, _)| *object_id)
+                    .map(|object_id| object_id.into())
+                    .collect::<Vec<Object>>(),
             }));
         }
 
