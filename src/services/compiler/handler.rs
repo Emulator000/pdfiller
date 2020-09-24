@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Cursor, SeekFrom};
@@ -231,17 +232,25 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
 
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
+
 struct PdfPageContainer {
     contents: Vec<Content>,
     dictionary: Dictionary,
+    objects: BTreeMap<ObjectId, Object>,
 }
 
 pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult {
+    let mut first_version = None;
+
     let mut objects = Vec::new();
     for document in documents.iter() {
         if let Some(ref file_name) = get_compiled_filepath(&document.file) {
             match PdfDocument::load(file_name) {
                 Ok(document) => {
+                    if first_version.is_none() {
+                        first_version = Some(document.version.clone());
+                    }
+
                     objects.append(&mut document.get_pages().iter().fold(
                         Vec::new(),
                         |mut pages, (_, page_id)| {
@@ -255,6 +264,7 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
                                     pages.push(PdfPageContainer {
                                         contents,
                                         dictionary: dictionary.to_owned(),
+                                        objects: document.objects.clone(),
                                     });
                                 }
                                 Err(e) => {
@@ -284,26 +294,33 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
         ExportCompilerResult::Error("Cannot extract PDFs pages".into())
     } else {
         let mut doc = PdfDocument::new();
-        doc.version = PDF_VERSION.to_string();
+        doc.version = first_version.unwrap_or(PDF_VERSION.to_string());
 
         let pages_id = doc.new_object_id();
 
         let mut pages: Vec<ObjectId> = Vec::new();
         for mut pdf_page in objects {
             let mut contents_ids: Vec<ObjectId> = Vec::new();
-            for content in pdf_page.contents {
-                contents_ids
-                    .push(doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap())));
+            for (object_id, object) in pdf_page.objects {
+                // contents_ids.push(doc.add_object(object));
+                // contents_ids.push(object_id);
+
+                doc.objects.insert(object_id, object);
             }
 
+            // for content in pdf_page.contents {
+            //     contents_ids
+            //         .push(doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap())));
+            // }
+
             pdf_page.dictionary.set("Parent", pages_id);
-            pdf_page.dictionary.set(
-                "Contents",
-                contents_ids
-                    .into_iter()
-                    .map(|id| id.into())
-                    .collect::<Vec<Object>>(),
-            );
+            // pdf_page.dictionary.set(
+            //     "Contents",
+            //     contents_ids
+            //         .into_iter()
+            //         .map(|id| id.into())
+            //         .collect::<Vec<Object>>(),
+            // );
 
             pages.push(doc.add_object(pdf_page.dictionary));
         }
