@@ -23,6 +23,7 @@
     sentry = "^0.20"
     sanitize-filename = "^0.2"
     uuid = { version = "0.8", features = ["v4"] }
+    simple-cache = "^0.1"
 
     # For static building
     openssl-sys = { version = "*", features = ["vendored"] }

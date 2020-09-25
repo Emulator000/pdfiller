@@ -1,4 +1,3 @@
-mod cache;
 pub mod models;
 pub mod wrapper;
 
@@ -8,16 +7,17 @@ use async_std::sync::{RwLock, RwLockWriteGuard};
 
 use redis::RedisResult;
 
+use simple_cache::Cache;
+
 use crate::config::RedisConfig;
 use crate::logger::Logger;
-use crate::redis::cache::Cache;
 use crate::redis::models::Model;
 
 #[derive(Clone)]
 pub struct Redis {
     client: Arc<redis::Client>,
     connection: Arc<RwLock<redis::aio::Connection>>,
-    cache: Cache,
+    cache: Cache<String>,
 }
 
 impl Redis {
@@ -93,7 +93,7 @@ impl Redis {
             .await;
 
         if result.is_ok() {
-            self.cache.set::<T, _>(&key, Some(model)).await;
+            self.cache.insert::<T>(key, Some(model)).await;
         }
 
         result
@@ -167,7 +167,7 @@ impl Redis {
     //         {
     //             Ok(res) => match serde_json::from_str::<T>(&res) {
     //                 Ok(res) => {
-    //                     self.cache.set::<T, _>(&key, Some(res)).await;
+    //                     self.cache.insert::<T>(key, Some(res)).await;
     //                 }
     //                 _ => {}
     //             },
@@ -181,7 +181,7 @@ impl Redis {
     //                     e
     //                 ));
     //
-    //                 self.cache.set::<T, _>(&key, None).await;
+    //                 self.cache.insert::<T>(key, None).await;
     //             }
     //         };
     //
@@ -198,7 +198,7 @@ impl Redis {
 
         match &result {
             Ok(_) => {
-                self.cache.del(&key).await;
+                self.cache.remove(&key).await;
             }
             Err(e) => {
                 sentry::capture_error(e);
