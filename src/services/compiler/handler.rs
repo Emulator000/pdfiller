@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use pdf_forms::{FieldState, Form, LoadError, ValueError};
 
-use lopdf::{Document as PdfDocument, Error, Object, ObjectId};
+use lopdf::{Dictionary, Document as PdfDocument, Error, Object, ObjectId};
 
 use bytes::Buf;
 
@@ -22,7 +22,7 @@ use crate::utils::{read_file_buf, CustomDocumentRenumber};
 
 pub type PDFillerMap = HashMap<String, Value>;
 
-const PDF_VERSION: &'static str = "1.4";
+const PDF_VERSION: &'static str = "1.5";
 const REQUIRED_MARKER: char = '!';
 
 pub enum HandlerCompilerResult {
@@ -265,12 +265,6 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-struct PdfDocumentContainer {
-    root: (ObjectId, Object),
-    pages: BTreeMap<usize, (ObjectId, Object)>,
-    objects: BTreeMap<ObjectId, Object>,
-}
-
 pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult {
     let documents_objects = get_documents_containers(documents);
     if documents_objects.is_empty() {
@@ -297,11 +291,11 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
     }
 }
 
-fn get_documents_containers(documents: &Vec<Document>) -> Vec<PdfDocumentContainer> {
+fn get_documents_containers(documents: &Vec<Document>) -> Vec<BTreeMap<ObjectId, Object>> {
     let mut max_id = 1;
 
     let mut documents_objects = Vec::new();
-    for (index, document) in documents.iter().enumerate() {
+    for document in documents {
         if let Some(ref file_name) = get_compiled_filepath(&document.file) {
             match PdfDocument::load(file_name) {
                 Ok(mut document) => {
@@ -309,40 +303,7 @@ fn get_documents_containers(documents: &Vec<Document>) -> Vec<PdfDocumentContain
 
                     max_id = document.max_id + 1;
 
-                    let mut pages = document
-                        .objects
-                        .iter()
-                        .filter(|(_, object)| object.type_name().unwrap_or("") == "Pages")
-                        .map(|(object_id, object)| (*object_id, object.clone()))
-                        .collect::<Vec<_>>();
-
-                    if let Some(pages) = pages.pop() {
-                        documents_objects.push(PdfDocumentContainer {
-                            root: pages,
-                            pages: document
-                                .get_pages()
-                                .into_iter()
-                                .map(|(i, object_id)| {
-                                    (
-                                        index + i as usize,
-                                        (
-                                            object_id,
-                                            document.get_object(object_id).unwrap().clone(),
-                                        ),
-                                    )
-                                })
-                                .collect(),
-                            objects: document
-                                .objects
-                                .iter()
-                                .filter(|(_, object)| {
-                                    !vec!["Page", "Pages"]
-                                        .contains(&object.type_name().unwrap_or(""))
-                                })
-                                .map(|(object_id, object)| (*object_id, object.clone()))
-                                .collect(),
-                        });
-                    }
+                    documents_objects.push(document.objects);
                 }
                 Err(e) => {
                     sentry::capture_error(&e);
@@ -356,49 +317,73 @@ fn get_documents_containers(documents: &Vec<Document>) -> Vec<PdfDocumentContain
     documents_objects
 }
 
-fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<PdfDocument> {
-    let mut document = PdfDocument::new();
-    document.version = PDF_VERSION.into();
+fn process_documents(documents_objects: Vec<BTreeMap<ObjectId, Object>>) -> Option<PdfDocument> {
+    let mut document = PdfDocument::with_version(PDF_VERSION);
 
-    let mut catalog_object = None;
-    let mut pages_object = None;
+    let mut catalog_object: Option<(ObjectId, Object)> = None;
+    let mut pages_object: Option<(ObjectId, Object)> = None;
 
     let mut pages: Vec<ObjectId> = Vec::new();
     for document_objects in documents_objects {
-        if pages_object.is_none() {
-            pages_object = Some(document_objects.root);
-        }
-
-        let pages_object = pages_object.as_ref().unwrap();
-
-        for (object_id, object) in document_objects.objects.iter() {
+        for (object_id, object) in document_objects.iter() {
             match object.type_name().unwrap_or("") {
                 "Catalog" => {
-                    if catalog_object.is_none() {
-                        catalog_object = Some((*object_id, object.clone()));
+                    catalog_object = Some((
+                        if let Some((id, _)) = catalog_object {
+                            id
+                        } else {
+                            *object_id
+                        },
+                        object.clone(),
+                    ));
+                }
+                "Pages" => {
+                    if let Some(dictionary) =
+                        upsert_dictionary(&object, pages_object.as_ref().map(|(_, object)| object))
+                    {
+                        pages_object = Some((
+                            if let Some((id, _)) = pages_object {
+                                id
+                            } else {
+                                *object_id
+                            },
+                            Object::Dictionary(dictionary),
+                        ));
                     }
                 }
+                "Page" => {}
+                "Outlines" => {}
+                "Outline" => {}
                 _ => {
                     document.objects.insert(*object_id, object.clone());
                 }
             }
         }
 
-        for (_, (object_id, object)) in document_objects.pages.iter() {
-            if let Ok(dictionary) = object.as_dict() {
-                let mut dictionary = dictionary.clone();
-                dictionary.set("Parent", pages_object.0);
+        if pages_object.is_none() {
+            return None;
+        }
 
-                document
-                    .objects
-                    .insert(*object_id, Object::Dictionary(dictionary));
+        for (object_id, object) in document_objects.into_iter() {
+            match object.type_name().unwrap_or("") {
+                "Page" => {
+                    if let Ok(dictionary) = object.as_dict() {
+                        let mut dictionary = dictionary.clone();
+                        dictionary.set("Parent", pages_object.as_ref().unwrap().0);
 
-                pages.push(*object_id);
+                        document
+                            .objects
+                            .insert(object_id, Object::Dictionary(dictionary));
+
+                        pages.push(object_id);
+                    }
+                }
+                _ => {}
             }
         }
     }
 
-    if catalog_object.is_none() || pages_object.is_none() {
+    if catalog_object.is_none() {
         return None;
     }
 
@@ -409,13 +394,6 @@ fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<Pdf
         let count = pages.len();
 
         let mut dictionary = dictionary.clone();
-        dictionary.set(
-            "Kids",
-            pages
-                .into_iter()
-                .map(|id| id.into())
-                .collect::<Vec<Object>>(),
-        );
         dictionary.set("Count", count as u32);
 
         document
@@ -426,6 +404,7 @@ fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<Pdf
     if let Ok(dictionary) = catalog_object.1.as_dict() {
         let mut dictionary = dictionary.clone();
         dictionary.set("Pages", pages_object.0);
+        dictionary.remove(b"Outlines"); // Outlines not supported in merged PDFs
 
         document
             .objects
@@ -434,9 +413,27 @@ fn process_documents(documents_objects: Vec<PdfDocumentContainer>) -> Option<Pdf
 
     document.trailer.set("Root", catalog_object.0);
 
+    document.max_id = document.objects.len() as u32;
+
+    document.renumber_objects();
     document.compress();
 
     Some(document)
+}
+
+fn upsert_dictionary(object: &Object, other_object: Option<&Object>) -> Option<Dictionary> {
+    if let Ok(dictionary) = object.as_dict() {
+        let mut dictionary = dictionary.clone();
+        // if let Some(object) = other_object {
+        //     if let Ok(old_dictionary) = object.as_dict() {
+        //         dictionary.extend(old_dictionary);
+        //     }
+        // }
+
+        Some(dictionary)
+    } else {
+        None
+    }
 }
 
 pub fn get_compiled_filepath<S: AsRef<str>>(filename: S) -> Option<String> {
