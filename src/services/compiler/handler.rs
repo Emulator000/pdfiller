@@ -187,7 +187,33 @@ pub fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompil
         Err(e) => match e {
             FillingError::Load(e) => match e {
                 LoadError::LopdfError(e) => match e {
-                    Error::DictKey => {
+                    // Error::DictKey => {
+                    //     if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
+                    //         match fs::create_dir_all(PATH_COMPILED) {
+                    //             Ok(_) => {
+                    //                 let _ = std::fs::copy(&document.file, &compiled_filename);
+                    //
+                    //                 HandlerCompilerResult::Success
+                    //             }
+                    //             Err(e) => {
+                    //                 sentry::capture_error(&e);
+                    //
+                    //                 HandlerCompilerResult::Error(format!(
+                    //                     "Error {:#?} saving a PDF file, aborted.",
+                    //                     e
+                    //                 ))
+                    //             }
+                    //         }
+                    //     } else {
+                    //         HandlerCompilerResult::Error(format!(
+                    //             "Error saving a PDF file, aborted.",
+                    //         ))
+                    //     }
+                    // }
+                    // _ => {
+                    //     HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",))
+                    // }
+                    _ => {
                         if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
                             match fs::create_dir_all(PATH_COMPILED) {
                                 Ok(_) => {
@@ -209,9 +235,6 @@ pub fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompil
                                 "Error saving a PDF file, aborted.",
                             ))
                         }
-                    }
-                    _ => {
-                        HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",))
                     }
                 },
                 _ => HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",)),
@@ -267,7 +290,7 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
 
 pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult {
     let documents_objects = get_documents_containers(documents);
-    if documents_objects.is_empty() {
+    if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
         ExportCompilerResult::Error("Cannot extract PDFs documents".into())
     } else {
         if let Some(mut document) = process_documents(documents_objects) {
@@ -291,10 +314,17 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
     }
 }
 
-fn get_documents_containers(documents: &Vec<Document>) -> Vec<BTreeMap<ObjectId, Object>> {
+struct DocumentObjects {
+    objects: BTreeMap<ObjectId, Object>,
+    pages: BTreeMap<ObjectId, Object>,
+}
+
+fn get_documents_containers(documents: &Vec<Document>) -> DocumentObjects {
     let mut max_id = 1;
 
-    let mut documents_objects = Vec::new();
+    let mut documents_pages = BTreeMap::new();
+    let mut documents_objects = BTreeMap::new();
+
     for document in documents {
         if let Some(ref file_name) = get_compiled_filepath(&document.file) {
             match PdfDocument::load(file_name) {
@@ -303,7 +333,19 @@ fn get_documents_containers(documents: &Vec<Document>) -> Vec<BTreeMap<ObjectId,
 
                     max_id = document.max_id + 1;
 
-                    documents_objects.push(document.objects);
+                    documents_pages.extend(
+                        document
+                            .get_pages()
+                            .into_iter()
+                            .map(|(_, object_id)| {
+                                (
+                                    object_id,
+                                    document.get_object(object_id).unwrap().to_owned(),
+                                )
+                            })
+                            .collect::<BTreeMap<ObjectId, Object>>(),
+                    );
+                    documents_objects.extend(document.objects);
                 }
                 Err(e) => {
                     sentry::capture_error(&e);
@@ -314,72 +356,65 @@ fn get_documents_containers(documents: &Vec<Document>) -> Vec<BTreeMap<ObjectId,
         }
     }
 
-    documents_objects
+    DocumentObjects {
+        pages: documents_pages,
+        objects: documents_objects,
+    }
 }
 
-fn process_documents(documents_objects: Vec<BTreeMap<ObjectId, Object>>) -> Option<PdfDocument> {
+fn process_documents(documents_objects: DocumentObjects) -> Option<PdfDocument> {
     let mut document = PdfDocument::with_version(PDF_VERSION);
 
     let mut catalog_object: Option<(ObjectId, Object)> = None;
     let mut pages_object: Option<(ObjectId, Object)> = None;
 
-    let mut pages: Vec<ObjectId> = Vec::new();
-    for document_objects in documents_objects {
-        for (object_id, object) in document_objects.iter() {
-            match object.type_name().unwrap_or("") {
-                "Catalog" => {
-                    catalog_object = Some((
-                        if let Some((id, _)) = catalog_object {
+    for (object_id, object) in documents_objects.objects.iter() {
+        match object.type_name().unwrap_or("") {
+            "Catalog" => {
+                catalog_object = Some((
+                    if let Some((id, _)) = catalog_object {
+                        id
+                    } else {
+                        *object_id
+                    },
+                    object.clone(),
+                ));
+            }
+            "Pages" => {
+                if let Some(dictionary) =
+                    upsert_dictionary(&object, pages_object.as_ref().map(|(_, object)| object))
+                {
+                    pages_object = Some((
+                        if let Some((id, _)) = pages_object {
                             id
                         } else {
                             *object_id
                         },
-                        object.clone(),
+                        Object::Dictionary(dictionary),
                     ));
                 }
-                "Pages" => {
-                    if let Some(dictionary) =
-                        upsert_dictionary(&object, pages_object.as_ref().map(|(_, object)| object))
-                    {
-                        pages_object = Some((
-                            if let Some((id, _)) = pages_object {
-                                id
-                            } else {
-                                *object_id
-                            },
-                            Object::Dictionary(dictionary),
-                        ));
-                    }
-                }
-                "Page" => {}
-                "Outlines" => {}
-                "Outline" => {}
-                _ => {
-                    document.objects.insert(*object_id, object.clone());
-                }
+            }
+            "Page" => {}
+            "Outlines" => {}
+            "Outline" => {}
+            _ => {
+                document.objects.insert(*object_id, object.clone());
             }
         }
+    }
 
-        if pages_object.is_none() {
-            return None;
-        }
+    if pages_object.is_none() {
+        return None;
+    }
 
-        for (object_id, object) in document_objects.into_iter() {
-            match object.type_name().unwrap_or("") {
-                "Page" => {
-                    if let Ok(dictionary) = object.as_dict() {
-                        let mut dictionary = dictionary.clone();
-                        dictionary.set("Parent", pages_object.as_ref().unwrap().0);
+    for (object_id, object) in documents_objects.pages.iter() {
+        if let Ok(dictionary) = object.as_dict() {
+            let mut dictionary = dictionary.clone();
+            dictionary.set("Parent", pages_object.as_ref().unwrap().0);
 
-                        document
-                            .objects
-                            .insert(object_id, Object::Dictionary(dictionary));
-
-                        pages.push(object_id);
-                    }
-                }
-                _ => {}
-            }
+            document
+                .objects
+                .insert(*object_id, Object::Dictionary(dictionary));
         }
     }
 
@@ -391,10 +426,8 @@ fn process_documents(documents_objects: Vec<BTreeMap<ObjectId, Object>>) -> Opti
     let pages_object = pages_object.unwrap();
 
     if let Ok(dictionary) = pages_object.1.as_dict() {
-        let count = pages.len();
-
         let mut dictionary = dictionary.clone();
-        dictionary.set("Count", count as u32);
+        dictionary.set("Count", documents_objects.pages.len() as u32);
 
         document
             .objects
@@ -424,11 +457,11 @@ fn process_documents(documents_objects: Vec<BTreeMap<ObjectId, Object>>) -> Opti
 fn upsert_dictionary(object: &Object, other_object: Option<&Object>) -> Option<Dictionary> {
     if let Ok(dictionary) = object.as_dict() {
         let mut dictionary = dictionary.clone();
-        // if let Some(object) = other_object {
-        //     if let Ok(old_dictionary) = object.as_dict() {
-        //         dictionary.extend(old_dictionary);
-        //     }
-        // }
+        if let Some(object) = other_object {
+            if let Ok(old_dictionary) = object.as_dict() {
+                dictionary.extend(old_dictionary);
+            }
+        }
 
         Some(dictionary)
     } else {

@@ -14,7 +14,8 @@
     serde = "^1.0"
     serde_derive = "^1.0"
     serde_json = "^1.0"
-    lopdf = "^0.25"
+#    lopdf = "^0.25"
+    lopdf = { path = "../lopdf" }
     pdf_forms = { path = "../pdf_form" }
 #    pdf_forms = "^0.1"
     zip = "^0.5"
