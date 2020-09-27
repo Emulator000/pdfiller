@@ -53,7 +53,7 @@ pub async fn compile_documents(
                                     if documents.len() == 1 {
                                         match documents.pop() {
                                             Some(document) => {
-                                                match handler::compile_document(map, &document) {
+                                                match handler::compile_document(map, &document).await {
                                                 HandlerCompilerResult::Success => {
                                                     match get_compiled_filepath(&document.file) {
                                                         Some(file_path) => {
@@ -93,7 +93,7 @@ pub async fn compile_documents(
                                             None => unreachable!(),
                                         }
                                     } else {
-                                        match handler::compile_documents(map, &documents) {
+                                        match handler::compile_documents(map, &documents).await {
                                             HandlerCompilerResult::Success => {
                                                 let merge = parameters.merge.unwrap_or(false);
                                                 let export_result = if merge {

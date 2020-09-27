@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
 
+mod client;
 mod config;
 mod data;
 mod logger;
