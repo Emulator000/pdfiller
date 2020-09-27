@@ -74,8 +74,6 @@ async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<Form, F
                                     if required && value.is_none() {
                                         Err(FillingError::RequiredField(name.to_owned()))
                                     } else if let Some(value) = value {
-                                        println!("Radio {} value: {}!", name, value);
-
                                         form.set_radio(index, value.as_str().unwrap_or("").into())
                                             .map_err(|e| FillingError::Value(e))
                                     } else {
@@ -158,13 +156,11 @@ async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<Form, F
                                                             page_id,
                                                             stream,
                                                             (rect.0, rect.1),
-                                                            (rect.2, rect.3),
+                                                            (rect.3, rect.2),
                                                         );
 
-                                                        let _ = form
-                                                            .document
-                                                            .objects
-                                                            .remove(&object_id);
+                                                        let _ =
+                                                            form.document.remove_object(&object_id);
                                                     }
                                                 }
                                             }
