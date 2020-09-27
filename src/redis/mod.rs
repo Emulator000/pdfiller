@@ -189,6 +189,7 @@ impl Redis {
     //     }
     // }
 
+    #[allow(dead_code)]
     pub async fn delete_one<T: Model>(&self, model: T) -> RedisResult<()> {
         let key = model.key();
         let result = redis::cmd("DEL")

@@ -1,5 +1,5 @@
-mod compiler;
 mod document;
+mod filler;
 
 use actix_web::web;
 
@@ -15,5 +15,5 @@ struct WsError {
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     document::config(cfg);
-    compiler::config(cfg);
+    filler::config(cfg);
 }

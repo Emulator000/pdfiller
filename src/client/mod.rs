@@ -7,6 +7,7 @@ use serde::Serialize;
 const USER_AGENT_KEY: &'static str = "User-Agent";
 const UA: &'static str = "PDFiller";
 
+#[allow(unused_mut)]
 fn get_client(mut request: ClientRequest) -> ClientRequest {
     request
 }
@@ -26,6 +27,7 @@ pub async fn get<S: AsRef<str>>(uri: S) -> Option<Vec<u8>> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn post<S: AsRef<str>, D: Serialize>(uri: S, request: D) -> Option<Vec<u8>> {
     let response = get_client(Client::default().post(uri.as_ref()))
         .header(USER_AGENT_KEY, UA)

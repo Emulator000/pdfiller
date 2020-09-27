@@ -8,8 +8,8 @@ use futures_lite::stream::StreamExt;
 
 use crate::data::Data;
 use crate::redis::models::document::Document;
+use crate::services::filler::compiler;
 use crate::services::WsError;
-use crate::utils::*;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(post_document);
@@ -29,9 +29,9 @@ pub async fn post_document(
         match field.content_disposition() {
             Some(ref content_type) => match content_type.get_name() {
                 Some("file") => match content_type.get_filename() {
-                    Some(filename) => match fs::create_dir_all(PATH) {
+                    Some(filename) => match fs::create_dir_all(compiler::PATH) {
                         Ok(_) => {
-                            let local_filepath = file_path(&filename);
+                            let local_filepath = compiler::file_path(&filename);
                             filepath = Some(local_filepath.clone());
 
                             match web::block(|| fs::File::create(local_filepath)).await {

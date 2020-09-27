@@ -4,19 +4,6 @@ use std::path::Path;
 use std::str;
 
 use lopdf::Dictionary;
-use uuid::Uuid;
-
-pub const PATH: &'static str = "./tmp/";
-pub const PATH_COMPILED: &'static str = "./tmp/compiled/";
-
-pub fn file_path<S: AsRef<str>>(filename: S) -> String {
-    format!(
-        "{}{}{}",
-        PATH,
-        Uuid::new_v4().to_string(),
-        sanitize_filename::sanitize(filename.as_ref())
-    )
-}
 
 pub fn get_filename<S: AsRef<str>>(filename: S) -> Option<String> {
     match Path::new(filename.as_ref()).file_name() {

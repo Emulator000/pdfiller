@@ -32,10 +32,12 @@ impl RedisWrapper {
         self.redis.insert::<T>(model).await
     }
 
+    #[allow(dead_code)]
     pub async fn update<T: 'static + Model, S: AsRef<str>>(&self, model: T) -> RedisResult<()> {
         self.redis.update_one::<T>(model).await
     }
 
+    #[allow(dead_code)]
     pub async fn delete<T: Model, S: AsRef<str>>(&self, model: T) -> RedisResult<()> {
         self.redis.delete_one::<T>(model).await
     }
