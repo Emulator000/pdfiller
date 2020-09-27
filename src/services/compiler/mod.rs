@@ -12,7 +12,8 @@ use serde_json::Value;
 use crate::data::Data;
 use crate::redis::models::document::Document;
 use crate::services::compiler::handler::{
-    get_compiled_filepath, zip_compiled_documents, ExportCompilerResult, HandlerCompilerResult,
+    get_compiled_filepath, merge_compiled_documents, zip_compiled_documents, ExportCompilerResult,
+    HandlerCompilerResult,
 };
 use crate::services::WsError;
 use crate::utils::read_file_buf;
@@ -21,10 +22,16 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(compile_documents);
 }
 
+#[derive(Deserialize)]
+pub struct CompileOptions {
+    pub merge: Option<bool>,
+}
+
 #[post("/compile/{token}")]
 pub async fn compile_documents(
     data: web::Data<Data>,
     token: web::Path<String>,
+    parameters: web::Query<CompileOptions>,
     bytes: web::Bytes,
 ) -> impl Responder {
     match str::from_utf8(&bytes) {
@@ -88,15 +95,32 @@ pub async fn compile_documents(
                                     } else {
                                         match handler::compile_documents(map, &documents) {
                                             HandlerCompilerResult::Success => {
-                                                match zip_compiled_documents(&documents) {
+                                                let merge = parameters.merge.unwrap_or(false);
+                                                let export_result = if merge {
+                                                    merge_compiled_documents(&documents)
+                                                } else {
+                                                    zip_compiled_documents(&documents)
+                                                };
+
+                                                match export_result {
                                                     ExportCompilerResult::Success(bytes) => {
                                                         HttpResponse::Ok()
                                                             .encoding(ContentEncoding::Identity)
-                                                            .content_type("application/zip")
+                                                            .content_type(format!(
+                                                                "{}",
+                                                                if merge {
+                                                                    "application/pdf"
+                                                                } else {
+                                                                    "application/zip"
+                                                                }
+                                                            ))
                                                             .header("accept-ranges", "bytes")
                                                             .header(
                                                                 "content-disposition",
-                                                                "attachment; filename=\"pdfs.zip\"",
+                                                                format!(
+                                                                    "attachment; filename=\"pdfs.{}\"",
+                                                                    if merge { "pdf" } else { "zip" }
+                                                                ),
                                                             )
                                                             .body(bytes)
                                                     }
