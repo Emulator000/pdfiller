@@ -22,11 +22,12 @@ Stopping:
 
 * `make stop` to shutdown all containers
 
-## Not done yet
+## TO DO
 
 The following features aren't implemented yet:
-- Image fields with a pattern for the field name
-- Merge all PDFs into one PDF in addition to ZIP option (default)
-- PDF's pages rasterization (flattening)
-- Files caching
-- Temporary files deletion monitor
+- [x] Image fields with a pattern for the field name
+- [x] Merge all PDFs into one PDF in addition to ZIP option (default)
+- [ ] Fix merged PDF order while uploaded or compiled
+- [ ] PDF's pages rasterization (flattening)
+- [ ] Files caching
+- [ ] Temporary files deletion monitor
