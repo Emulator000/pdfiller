@@ -6,7 +6,7 @@ use std::str;
 
 use serde_json::Value;
 
-use pdf_forms::LoadError;
+use pdf_form::LoadError;
 
 use lopdf::Error;
 

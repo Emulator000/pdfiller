@@ -3,7 +3,7 @@ use std::str;
 
 use serde_json::Value;
 
-use pdf_forms::{FieldState, Form, LoadError, ValueError};
+use pdf_form::{FieldState, Form, LoadError, ValueError};
 
 use lopdf::xobject;
 
@@ -136,8 +136,7 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                                             (rect.3, rect.2),
                                                         );
 
-                                                        let _ =
-                                                            form.document.remove_object(&object_id);
+                                                        let _ = form.remove_field(index);
                                                     }
                                                 }
                                             }

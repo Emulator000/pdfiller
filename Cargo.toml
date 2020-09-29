@@ -14,10 +14,8 @@
     serde = "^1.0"
     serde_derive = "^1.0"
     serde_json = "^1.0"
-#    lopdf = "^0.25"
-    lopdf = { path = "../lopdf", features = ["embed_image"] }
-    pdf_forms = { path = "../pdf_form" }
-#    pdf_forms = "^0.1"
+    lopdf = { version = "^0.26", features = ["embed_image"] }
+    pdf_form = "^0.4"
     zip = "^0.5"
     bytes = "^0.5"
     toml = "^0.5"
