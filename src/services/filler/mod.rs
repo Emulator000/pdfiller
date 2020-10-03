@@ -14,7 +14,6 @@ use serde_json::Value;
 use crate::data::Data;
 use crate::redis::models::document::Document;
 use crate::services::WsError;
-use crate::utils;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(compile_documents);
@@ -54,8 +53,8 @@ pub async fn compile_documents(
                                                 compiler::HandlerCompilerResult::Success => {
                                                     match compiler::get_compiled_filepath(&document.file) {
                                                         Some(file_path) => {
-                                                            match utils::read_file_buf(file_path) {
-                                                                    Some(buffer) => HttpResponse::Ok()
+                                                            match crystalsoft_utils::read_file_buf(file_path) {
+                                                                    Ok(buffer) => HttpResponse::Ok()
                                                                         .encoding(ContentEncoding::Identity)
                                                                         .content_type("application/pdf")
                                                                         .header("accept-ranges", "bytes")
@@ -64,8 +63,8 @@ pub async fn compile_documents(
                                                                             "attachment; filename=\"compiled.pdf\"",
                                                                         )
                                                                         .body(buffer),
-                                                                    None => HttpResponse::NotFound().json(WsError {
-                                                                        error: "Error compiling the PDF".into(),
+                                                                    Err(e) => HttpResponse::NotFound().json(WsError {
+                                                                        error: format!("Error compiling the PDF: {:#?}", e),
                                                                     })
                                                                 }
                                                         }

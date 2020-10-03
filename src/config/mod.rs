@@ -4,8 +4,6 @@ use serde::Deserialize;
 
 use toml;
 
-use crate::utils::read_file_string;
-
 #[derive(Clone, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
@@ -32,12 +30,12 @@ pub struct SentryConfig {
 
 impl Config {
     pub fn new<S: AsRef<str>>(path: S) -> Self {
-        match read_file_string(path.as_ref()) {
-            Some(configuration) => toml::from_str(
+        match crystalsoft_utils::read_file_string(path.as_ref()) {
+            Ok(configuration) => toml::from_str(
                 &envsubst::substitute(configuration, &env::vars().collect()).unwrap(),
             )
             .unwrap(),
-            None => panic!("Couldn't open {} file.", path.as_ref()),
+            Err(e) => panic!("Couldn't open {} file: {:#?}", path.as_ref(), e),
         }
     }
 }

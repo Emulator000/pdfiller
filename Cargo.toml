@@ -27,6 +27,7 @@
     linked-hash-map = "^0.5"
     simple-cache = "^0.1"
     regex = "^1.3"
+    crystalsoft-utils = "^0.1"
 
     # For static building
     openssl-sys = { version = "*", features = ["vendored"] }

@@ -20,7 +20,6 @@ use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
 use crate::services::filler::processor;
-use crate::utils;
 
 pub type PDFillerMap = HashMap<String, Value>;
 
@@ -138,12 +137,12 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
     let mut zip = zip::ZipWriter::new(w);
 
     for document in documents.iter() {
-        if let Some(ref file_name) = utils::get_filename(&document.file) {
+        if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
                 Ok(_) => match get_compiled_filepath(&document.file) {
                     Some(ref compiled_file_name) => {
-                        match utils::read_file_buf(compiled_file_name) {
-                            Some(buffer) => match zip.write(&buffer) {
+                        match crystalsoft_utils::read_file_buf(compiled_file_name) {
+                            Ok(buffer) => match zip.write(&buffer) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     return ExportCompilerResult::Error(format!(
@@ -152,10 +151,11 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
                                     ));
                                 }
                             },
-                            None => {
-                                return ExportCompilerResult::Error(
-                                    "Error making a ZIP file.".into(),
-                                );
+                            Err(e) => {
+                                return ExportCompilerResult::Error(format!(
+                                    "Error making a ZIP file: {:#?}",
+                                    e
+                                ));
                             }
                         }
                     }
@@ -207,7 +207,7 @@ pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResu
 }
 
 pub fn get_compiled_filepath<S: AsRef<str>>(filename: S) -> Option<String> {
-    match utils::get_filename(filename) {
+    match crystalsoft_utils::get_filename(filename) {
         Some(file_name) => Some(format!("{}{}", PATH_COMPILED, file_name)),
         None => None,
     }
