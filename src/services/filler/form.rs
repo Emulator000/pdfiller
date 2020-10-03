@@ -3,7 +3,7 @@ use std::str;
 
 use serde_json::Value;
 
-use pdf_form::{FieldState, Form, LoadError, ValueError};
+use pdf_forms::{FieldState, Form, LoadError, ValueError};
 
 use lopdf::xobject;
 
