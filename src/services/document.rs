@@ -2,17 +2,18 @@ use std::fs;
 use std::io::Write;
 
 use actix_multipart::Multipart;
+use actix_web::http::header::ACCEPT;
 use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
 
 use crate::data::Data;
 use crate::redis::models::document::Document;
-use crate::services::filler::compiler;
-use crate::services::WsError;
+use crate::services::{self, filler::compiler, WsError};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(post_document);
+    cfg.service(get_document);
     cfg.service(get_documents);
     cfg.service(get_documents_by_token);
 }
@@ -106,6 +107,49 @@ pub async fn post_document(
                 error: format!("An error occurred"),
             })
         }
+    }
+}
+
+#[get("/document/{token}")]
+pub async fn get_document(
+    data: web::Data<Data>,
+    token: web::Path<String>,
+    request: web::HttpRequest,
+) -> impl Responder {
+    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+        if documents.is_empty() {
+            return HttpResponse::NotFound().json(WsError {
+                error: "No documents found for this token!".into(),
+            });
+        }
+
+        if let Some(accept) = request.headers().get(ACCEPT) {
+            let accept = accept.to_str().unwrap_or("").to_lowercase();
+
+            if accept.as_str() == mime::APPLICATION_PDF
+                || accept.as_str() == mime::APPLICATION_OCTET_STREAM
+            {
+                let export_result = if accept.as_str() == mime::APPLICATION_PDF {
+                    compiler::merge_documents(documents)
+                } else {
+                    compiler::zip_documents(documents)
+                };
+
+                services::export_content(accept.as_str() != mime::APPLICATION_PDF, export_result)
+            } else {
+                HttpResponse::NotAcceptable().json(WsError {
+                    error: "Only PDF or Streams are accepted".into(),
+                })
+            }
+        } else {
+            HttpResponse::BadRequest().json(WsError {
+                error: "Accept header not set.".into(),
+            })
+        }
+    } else {
+        HttpResponse::NotFound().json(WsError {
+            error: "No documents found for this token!".into(),
+        })
     }
 }
 
