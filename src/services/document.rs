@@ -9,6 +9,7 @@ use futures_lite::stream::StreamExt;
 use crate::data::{Data, DataResult};
 use crate::redis::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
+use chrono::Utc;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(post_document);
@@ -96,6 +97,7 @@ pub async fn post_document(
                     let document = Document {
                         token: token.0,
                         file,
+                        date: Utc::now(),
                     };
 
                     match data.create_document(document.clone()).await {
