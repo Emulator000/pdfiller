@@ -4,7 +4,6 @@ mod processor;
 
 use std::str;
 
-use actix_web::http::header::ACCEPT;
 use actix_web::{post, web, HttpResponse, Responder};
 
 use serde::Deserialize;
@@ -47,30 +46,20 @@ pub async fn compile_documents(
 
                                 match compiler::compile_documents(map, &documents).await {
                                     compiler::HandlerCompilerResult::Success => {
-                                        if let Some(accept) = request.headers().get(ACCEPT) {
-                                            let accept =
-                                                accept.to_str().unwrap_or("").to_lowercase();
+                                        if let Some(accept) =
+                                            services::get_accepted_header(&request)
+                                        {
+                                            let export_result =
+                                                if accept.as_str() == mime::APPLICATION_PDF {
+                                                    compiler::merge_documents(documents, true)
+                                                } else {
+                                                    compiler::zip_documents(documents, true)
+                                                };
 
-                                            if accept.as_str() == mime::APPLICATION_PDF
-                                                || accept.as_str() == mime::APPLICATION_OCTET_STREAM
-                                            {
-                                                let export_result =
-                                                    if accept.as_str() == mime::APPLICATION_PDF {
-                                                        compiler::merge_documents(documents, true)
-                                                    } else {
-                                                        compiler::zip_documents(documents, true)
-                                                    };
-
-                                                services::export_content(accept, export_result)
-                                            } else {
-                                                HttpResponse::NotAcceptable().json(WsError {
-                                                    error: "Only PDF or Streams are accepted"
-                                                        .into(),
-                                                })
-                                            }
+                                            services::export_content(accept, export_result)
                                         } else {
-                                            HttpResponse::BadRequest().json(WsError {
-                                                error: "Accept header not set.".into(),
+                                            HttpResponse::NotAcceptable().json(WsError {
+                                                error: "Only PDF or Streams are accepted".into(),
                                             })
                                         }
                                     }
