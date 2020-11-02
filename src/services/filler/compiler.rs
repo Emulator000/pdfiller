@@ -131,7 +131,7 @@ pub async fn compile_document(map: &PDFillerMap, document: &Document) -> Handler
     }
 }
 
-pub fn zip_compiled_documents(documents: Vec<Document>) -> ExportCompilerResult {
+pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
     let buf = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
@@ -139,7 +139,11 @@ pub fn zip_compiled_documents(documents: Vec<Document>) -> ExportCompilerResult 
     for document in documents {
         if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
-                Ok(_) => match get_compiled_filepath(&document.file) {
+                Ok(_) => match if compiled {
+                    get_compiled_filepath(&document.file)
+                } else {
+                    Some(document.file)
+                } {
                     Some(ref compiled_file_name) => {
                         match crystalsoft_utils::read_file_buf(compiled_file_name) {
                             Ok(buffer) => match zip.write(&buffer) {
@@ -180,10 +184,14 @@ pub fn zip_compiled_documents(documents: Vec<Document>) -> ExportCompilerResult 
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-pub fn merge_compiled_documents(mut documents: Vec<Document>) -> ExportCompilerResult {
+pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
-        if let Some(ref file_name) = get_compiled_filepath(&document.file) {
+        if let Some(ref file_name) = if compiled {
+            get_compiled_filepath(&document.file)
+        } else {
+            Some(document.file)
+        } {
             match PdfDocument::load(file_name) {
                 Ok(mut document) => get_document_buffer(&mut document),
                 Err(e) => {

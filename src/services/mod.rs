@@ -3,7 +3,7 @@ mod filler;
 
 use actix_web::dev::BodyEncoding;
 use actix_web::http::ContentEncoding;
-use actix_web::{body, web, HttpResponse};
+use actix_web::{web, HttpResponse};
 
 use crate::services::filler::compiler;
 
@@ -22,20 +22,24 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     filler::config(cfg);
 }
 
-pub fn export_content(
-    multiple: bool,
+pub fn export_content<S: AsRef<str>>(
+    accept: S,
     export_result: compiler::ExportCompilerResult,
-) -> Response<body::Body> {
+) -> HttpResponse {
     match export_result {
         compiler::ExportCompilerResult::Success(bytes) => HttpResponse::Ok()
             .encoding(ContentEncoding::Identity)
-            .content_type(&accept)
+            .content_type(accept.as_ref())
             .header("accept-ranges", "bytes")
             .header(
                 "content-disposition",
                 format!(
                     "attachment; filename=\"pdf.{}\"",
-                    if multiple { "zip" } else { "pdf" }
+                    if accept.as_ref() != mime::APPLICATION_PDF {
+                        "zip"
+                    } else {
+                        "pdf"
+                    }
                 ),
             )
             .body(bytes),

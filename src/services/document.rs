@@ -130,12 +130,12 @@ pub async fn get_document(
                 || accept.as_str() == mime::APPLICATION_OCTET_STREAM
             {
                 let export_result = if accept.as_str() == mime::APPLICATION_PDF {
-                    compiler::merge_documents(documents)
+                    compiler::merge_documents(documents, false)
                 } else {
-                    compiler::zip_documents(documents)
+                    compiler::zip_documents(documents, false)
                 };
 
-                services::export_content(accept.as_str() != mime::APPLICATION_PDF, export_result)
+                services::export_content(accept, export_result)
             } else {
                 HttpResponse::NotAcceptable().json(WsError {
                     error: "Only PDF or Streams are accepted".into(),
