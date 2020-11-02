@@ -144,25 +144,23 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
                 } else {
                     Some(document.file)
                 } {
-                    Some(ref compiled_file_name) => {
-                        match crystalsoft_utils::read_file_buf(compiled_file_name) {
-                            Ok(buffer) => match zip.write(&buffer) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    return ExportCompilerResult::Error(format!(
-                                        "Error making a ZIP file: {:#?}",
-                                        e
-                                    ));
-                                }
-                            },
+                    Some(ref file_name) => match crystalsoft_utils::read_file_buf(file_name) {
+                        Ok(buffer) => match zip.write_all(&buffer) {
+                            Ok(_) => {}
                             Err(e) => {
                                 return ExportCompilerResult::Error(format!(
                                     "Error making a ZIP file: {:#?}",
                                     e
                                 ));
                             }
+                        },
+                        Err(e) => {
+                            return ExportCompilerResult::Error(format!(
+                                "Error making a ZIP file: {:#?}",
+                                e
+                            ));
                         }
-                    }
+                    },
                     None => {
                         return ExportCompilerResult::Error("Error making a ZIP file.".into());
                     }
