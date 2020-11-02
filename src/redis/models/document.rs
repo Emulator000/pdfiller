@@ -1,10 +1,14 @@
-use crate::redis::models::Model;
+use chrono::{DateTime, Utc};
+
 use simple_cache::CacheItem;
+
+use crate::redis::models::Model;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Document {
     pub token: String,
     pub file: String,
+    pub date: DateTime<Utc>,
 }
 
 impl CacheItem for Document {}

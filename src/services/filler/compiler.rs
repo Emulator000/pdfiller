@@ -23,8 +23,7 @@ use crate::services::filler::processor;
 
 pub type PDFillerMap = HashMap<String, Value>;
 
-pub const PATH: &'static str = "./tmp/";
-pub const PATH_COMPILED: &'static str = "./tmp/compiled/";
+pub const PATH_COMPILED: &'static str = "compiled/";
 
 pub enum HandlerCompilerResult {
     Success,
@@ -37,21 +36,22 @@ pub enum ExportCompilerResult {
     Error(String),
 }
 
-pub fn file_path<S: AsRef<str>>(filename: S) -> String {
+pub fn file_path<S: AsRef<str>>(path: S, filename: S) -> String {
     format!(
         "{}{}{}",
-        PATH,
+        path.as_ref(),
         Uuid::new_v4().to_string(),
         sanitize_filename::sanitize(filename.as_ref())
     )
 }
 
-pub async fn compile_documents(
+pub async fn compile_documents<S: AsRef<str>>(
+    path: S,
     map: &PDFillerMap,
     documents: &Vec<Document>,
 ) -> HandlerCompilerResult {
     for document in documents.iter() {
-        match compile_document(map, &document).await {
+        match compile_document(path.as_ref(), map, &document).await {
             HandlerCompilerResult::FillingError(e) => {
                 return HandlerCompilerResult::FillingError(e);
             }
@@ -65,11 +65,15 @@ pub async fn compile_documents(
     HandlerCompilerResult::Success
 }
 
-pub async fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompilerResult {
+pub async fn compile_document<S: AsRef<str>>(
+    path: S,
+    map: &PDFillerMap,
+    document: &Document,
+) -> HandlerCompilerResult {
     match form::fields_filler(map, document).await {
         Ok(mut form) => {
             if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
-                match fs::create_dir_all(PATH_COMPILED) {
+                match fs::create_dir_all(format!("{}{}", path.as_ref(), PATH_COMPILED)) {
                     Ok(_) => match form.save(&compiled_filename) {
                         Ok(_) => HandlerCompilerResult::Success,
                         Err(e) => {

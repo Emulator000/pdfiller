@@ -6,7 +6,9 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
 
-use crate::data::Data;
+use chrono::Utc;
+
+use crate::data::{Data, DataResult};
 use crate::redis::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
@@ -32,52 +34,64 @@ pub async fn post_document(
                 match field.content_disposition() {
                     Some(ref content_type) => match content_type.get_name() {
                         Some("file") => match content_type.get_filename() {
-                            Some(filename) => match fs::create_dir_all(compiler::PATH) {
-                                Ok(_) => {
-                                    let local_filepath = compiler::file_path(&filename);
-                                    filepath = Some(local_filepath.clone());
+                            Some(filename) => {
+                                if !filename.is_empty() {
+                                    match fs::create_dir_all(data.config.temp.as_str()) {
+                                        Ok(_) => {
+                                            let local_filepath = compiler::file_path(
+                                                data.config.temp.as_str(),
+                                                &filename,
+                                            );
+                                            filepath = Some(local_filepath.clone());
 
-                                    match web::block(|| fs::File::create(local_filepath)).await {
-                                        Ok(mut file) => {
-                                            while let Some(chunk) = field.next().await {
-                                                match chunk {
-                                                    Ok(data) => match web::block(move || {
-                                                        file.write_all(&data).map(|_| file)
-                                                    })
-                                                    .await
-                                                    {
-                                                        Ok(f) => {
-                                                            file = f;
+                                            match web::block(|| fs::File::create(local_filepath))
+                                                .await
+                                            {
+                                                Ok(mut file) => {
+                                                    while let Some(chunk) = field.next().await {
+                                                        match chunk {
+                                                            Ok(data) => {
+                                                                match web::block(move || {
+                                                                    file.write_all(&data)
+                                                                        .map(|_| file)
+                                                                })
+                                                                .await
+                                                                {
+                                                                    Ok(f) => {
+                                                                        file = f;
+                                                                    }
+                                                                    Err(e) => {
+                                                                        sentry::capture_error(&e);
+
+                                                                        return HttpResponse::InternalServerError().json(
+                                                                    WsError {
+                                                                        error: format!("An error occurred during upload: {:#?}", e),
+                                                                    },
+                                                                );
+                                                                    }
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                sentry::capture_error(&e);
+
+                                                                filepath = None;
+                                                            }
                                                         }
-                                                        Err(e) => {
-                                                            sentry::capture_error(&e);
-
-                                                            return HttpResponse::InternalServerError().json(
-                                                                WsError {
-                                                                    error: format!("An error occurred during upload: {:#?}", e),
-                                                                },
-                                                            );
-                                                        }
-                                                    },
-                                                    Err(e) => {
-                                                        sentry::capture_error(&e);
-
-                                                        filepath = None;
                                                     }
+                                                }
+                                                Err(e) => {
+                                                    sentry::capture_error(&e);
+
+                                                    filepath = None;
                                                 }
                                             }
                                         }
                                         Err(e) => {
                                             sentry::capture_error(&e);
-
-                                            filepath = None;
                                         }
                                     }
                                 }
-                                Err(e) => {
-                                    sentry::capture_error(&e);
-                                }
-                            },
+                            }
                             None => {}
                         },
                         Some(_) => {}
@@ -96,11 +110,12 @@ pub async fn post_document(
                     let document = Document {
                         token: token.0,
                         file,
+                        date: Utc::now(),
                     };
 
-                    match data.redis.create::<Document>(document.clone()).await {
-                        Ok(_) => HttpResponse::Created().json(document),
-                        Err(e) => HttpResponse::InternalServerError().json(WsError {
+                    match data.create_document(document.clone()).await {
+                        DataResult::Ok => HttpResponse::Created().json(document),
+                        DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
                             error: format!("An error occurred: {:#?}", e),
                         }),
                     }
@@ -128,7 +143,7 @@ pub async fn get_document(
     token: web::Path<String>,
     request: web::HttpRequest,
 ) -> impl Responder {
-    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+    if let Some(documents) = data.get_documents_by_token(&token.0).await {
         if documents.is_empty() {
             return HttpResponse::NotFound().json(WsError {
                 error: "No documents found for this token!".into(),
@@ -157,7 +172,7 @@ pub async fn get_document(
 
 #[get("/documents")]
 pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
-    if let Some(documents) = data.redis.get_all::<Document>().await {
+    if let Some(documents) = data.get_all_documents().await {
         HttpResponse::Ok().json(documents)
     } else {
         HttpResponse::NoContent().json(WsError {
@@ -171,7 +186,7 @@ pub async fn get_documents_by_token(
     data: web::Data<Data>,
     token: web::Path<String>,
 ) -> impl Responder {
-    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+    if let Some(documents) = data.get_documents_by_token(&token.0).await {
         HttpResponse::Ok().json(documents)
     } else {
         HttpResponse::NoContent().json(WsError {

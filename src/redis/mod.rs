@@ -155,39 +155,40 @@ impl Redis {
         }
     }
 
-    // pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
-    //     let key = T::model_key::<T, S>(Some(value));
-    //     if let Some(value) = self.cache.get::<T, _>(&key).await {
-    //         value
-    //     } else {
-    //         match redis::cmd("GET")
-    //             .arg(&key)
-    //             .query_async::<_, String>(&mut self.connection().await)
-    //             .await
-    //         {
-    //             Ok(res) => match serde_json::from_str::<T>(&res) {
-    //                 Ok(res) => {
-    //                     self.cache.insert::<T>(key, Some(res)).await;
-    //                 }
-    //                 _ => {}
-    //             },
-    //             Err(e) => {
-    //                 sentry::capture_error(&e);
-    //
-    //                 Logger::log(format!(
-    //                     "Error getting {} with key {}: {:#?}",
-    //                     T::name(),
-    //                     &key,
-    //                     e
-    //                 ));
-    //
-    //                 self.cache.insert::<T>(key, None).await;
-    //             }
-    //         };
-    //
-    //         self.cache.get::<T, _>(&key).await.unwrap()
-    //     }
-    // }
+    #[allow(dead_code)]
+    pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
+        let key = T::model_key::<T, S>(Some(value));
+        if let Some(value) = self.cache.get::<T, _>(&key).await {
+            value
+        } else {
+            match redis::cmd("GET")
+                .arg(&key)
+                .query_async::<_, String>(&mut *self.connection().await)
+                .await
+            {
+                Ok(res) => match serde_json::from_str::<T>(&res) {
+                    Ok(res) => {
+                        self.cache.insert::<T>(key.clone(), Some(res)).await;
+                    }
+                    _ => {}
+                },
+                Err(e) => {
+                    sentry::capture_error(&e);
+
+                    Logger::log(format!(
+                        "Error getting {} with key {}: {:#?}",
+                        T::name(),
+                        &key,
+                        e
+                    ));
+
+                    self.cache.insert::<T>(key.clone(), None).await;
+                }
+            };
+
+            self.cache.get::<T, _>(&key).await.unwrap()
+        }
+    }
 
     #[allow(dead_code)]
     pub async fn delete_one<T: Model>(&self, model: T) -> RedisResult<()> {
