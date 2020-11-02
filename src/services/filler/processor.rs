@@ -14,7 +14,7 @@ pub struct DocumentObjects {
     pub pages: BTreeMap<ObjectId, Object>,
 }
 
-pub fn get_documents_containers(documents: &Vec<Document>) -> DocumentObjects {
+pub fn get_documents_containers(documents: Vec<Document>) -> DocumentObjects {
     let mut max_id = 1;
 
     let mut documents_pages = BTreeMap::new();
