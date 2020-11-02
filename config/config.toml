@@ -1,3 +1,6 @@
+[service]
+    temp = "${PF_TEMP_PATH}"
+
 [server]
     bind_address = "${PF_WS_HOST}"
     bind_port = ${PF_WS_PORT}

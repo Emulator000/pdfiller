@@ -28,7 +28,10 @@ async fn main() -> std::io::Result<()> {
 
     let _guard = sentry::init(config.sentry.dsn);
 
-    let data = Data::new(RedisWrapper::new(Redis::new(&config.redis).await));
+    let data = Data::new(
+        config.service.clone(),
+        RedisWrapper::new(Redis::new(&config.redis).await),
+    );
 
     HttpServer::new(move || {
         App::new()

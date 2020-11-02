@@ -6,9 +6,15 @@ use toml;
 
 #[derive(Clone, Deserialize)]
 pub struct Config {
+    pub service: ServiceConfig,
     pub server: ServerConfig,
     pub redis: RedisConfig,
     pub sentry: SentryConfig,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct ServiceConfig {
+    pub temp: String,
 }
 
 #[derive(Clone, Deserialize)]

@@ -6,10 +6,11 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
 
+use chrono::Utc;
+
 use crate::data::{Data, DataResult};
 use crate::redis::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
-use chrono::Utc;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(post_document);
@@ -33,52 +34,64 @@ pub async fn post_document(
                 match field.content_disposition() {
                     Some(ref content_type) => match content_type.get_name() {
                         Some("file") => match content_type.get_filename() {
-                            Some(filename) => match fs::create_dir_all(compiler::PATH) {
-                                Ok(_) => {
-                                    let local_filepath = compiler::file_path(&filename);
-                                    filepath = Some(local_filepath.clone());
+                            Some(filename) => {
+                                if !filename.is_empty() {
+                                    match fs::create_dir_all(data.config.temp.as_str()) {
+                                        Ok(_) => {
+                                            let local_filepath = compiler::file_path(
+                                                data.config.temp.as_str(),
+                                                &filename,
+                                            );
+                                            filepath = Some(local_filepath.clone());
 
-                                    match web::block(|| fs::File::create(local_filepath)).await {
-                                        Ok(mut file) => {
-                                            while let Some(chunk) = field.next().await {
-                                                match chunk {
-                                                    Ok(data) => match web::block(move || {
-                                                        file.write_all(&data).map(|_| file)
-                                                    })
-                                                    .await
-                                                    {
-                                                        Ok(f) => {
-                                                            file = f;
+                                            match web::block(|| fs::File::create(local_filepath))
+                                                .await
+                                            {
+                                                Ok(mut file) => {
+                                                    while let Some(chunk) = field.next().await {
+                                                        match chunk {
+                                                            Ok(data) => {
+                                                                match web::block(move || {
+                                                                    file.write_all(&data)
+                                                                        .map(|_| file)
+                                                                })
+                                                                .await
+                                                                {
+                                                                    Ok(f) => {
+                                                                        file = f;
+                                                                    }
+                                                                    Err(e) => {
+                                                                        sentry::capture_error(&e);
+
+                                                                        return HttpResponse::InternalServerError().json(
+                                                                    WsError {
+                                                                        error: format!("An error occurred during upload: {:#?}", e),
+                                                                    },
+                                                                );
+                                                                    }
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                sentry::capture_error(&e);
+
+                                                                filepath = None;
+                                                            }
                                                         }
-                                                        Err(e) => {
-                                                            sentry::capture_error(&e);
-
-                                                            return HttpResponse::InternalServerError().json(
-                                                                WsError {
-                                                                    error: format!("An error occurred during upload: {:#?}", e),
-                                                                },
-                                                            );
-                                                        }
-                                                    },
-                                                    Err(e) => {
-                                                        sentry::capture_error(&e);
-
-                                                        filepath = None;
                                                     }
+                                                }
+                                                Err(e) => {
+                                                    sentry::capture_error(&e);
+
+                                                    filepath = None;
                                                 }
                                             }
                                         }
                                         Err(e) => {
                                             sentry::capture_error(&e);
-
-                                            filepath = None;
                                         }
                                     }
                                 }
-                                Err(e) => {
-                                    sentry::capture_error(&e);
-                                }
-                            },
+                            }
                             None => {}
                         },
                         Some(_) => {}
