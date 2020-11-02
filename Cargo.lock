@@ -1869,6 +1869,7 @@ dependencies = [
  "futures-lite",
  "linked-hash-map",
  "lopdf",
+ "mime",
  "openssl-sys",
  "pdf_forms",
  "redis",
