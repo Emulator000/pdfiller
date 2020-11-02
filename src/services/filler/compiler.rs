@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use pdf_forms::LoadError;
 
-use lopdf::Error;
+use lopdf::{Document as PdfDocument, Error};
 
 use bytes::Buf;
 
@@ -131,12 +131,12 @@ pub async fn compile_document(map: &PDFillerMap, document: &Document) -> Handler
     }
 }
 
-pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult {
+pub fn zip_compiled_documents(documents: Vec<Document>) -> ExportCompilerResult {
     let buf = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
 
-    for document in documents.iter() {
+    for document in documents {
         if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
                 Ok(_) => match get_compiled_filepath(&document.file) {
@@ -180,29 +180,49 @@ pub fn zip_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-pub fn merge_compiled_documents(documents: &Vec<Document>) -> ExportCompilerResult {
-    let documents_objects = processor::get_documents_containers(documents);
-    if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
-        ExportCompilerResult::Error("Cannot extract PDFs documents".into())
-    } else {
-        if let Some(mut document) = processor::process_documents(documents_objects) {
-            let buf = Vec::<u8>::new();
-            let mut cursor = Cursor::new(buf);
+pub fn merge_compiled_documents(mut documents: Vec<Document>) -> ExportCompilerResult {
+    if documents.len() == 1 {
+        let document = documents.pop().unwrap();
+        if let Some(ref file_name) = get_compiled_filepath(&document.file) {
+            match PdfDocument::load(file_name) {
+                Ok(mut document) => get_document_buffer(&mut document),
+                Err(e) => {
+                    sentry::capture_error(&e);
 
-            match document.save_to(&mut cursor) {
-                Ok(_) => {
-                    let _ = cursor.seek(SeekFrom::Start(0));
-
-                    ExportCompilerResult::Success(cursor.bytes().to_vec())
+                    ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
                 }
-                Err(e) => ExportCompilerResult::Error(format!(
-                    "An error {:#?} occurred saving the PDFs files.",
-                    e
-                )),
             }
         } else {
-            ExportCompilerResult::Error(format!("Error decoding the PDFs files."))
+            ExportCompilerResult::Error(format!("Error getting the compiled PDF file."))
         }
+    } else {
+        let documents_objects = processor::get_documents_containers(documents);
+        if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
+            ExportCompilerResult::Error("Cannot extract PDFs documents".into())
+        } else {
+            if let Some(mut document) = processor::process_documents(documents_objects) {
+                get_document_buffer(&mut document)
+            } else {
+                ExportCompilerResult::Error(format!("Error decoding the PDFs files."))
+            }
+        }
+    }
+}
+
+fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult {
+    let buf = Vec::<u8>::new();
+    let mut cursor = Cursor::new(buf);
+
+    match document.save_to(&mut cursor) {
+        Ok(_) => {
+            let _ = cursor.seek(SeekFrom::Start(0));
+
+            ExportCompilerResult::Success(cursor.bytes().to_vec())
+        }
+        Err(e) => ExportCompilerResult::Error(format!(
+            "An error {:#?} occurred saving the PDFs files.",
+            e
+        )),
     }
 }
 

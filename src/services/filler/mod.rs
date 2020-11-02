@@ -37,7 +37,7 @@ pub async fn compile_documents(
                 if let Some(value) = values.get("data") {
                     match <compiler::PDFillerMap>::deserialize(value) {
                         Ok(ref map) => {
-                            if let Some(mut documents) =
+                            if let Some(documents) =
                                 data.redis.get_all_by::<Document, _>(&token.0).await
                             {
                                 if documents.is_empty() {
@@ -46,98 +46,54 @@ pub async fn compile_documents(
                                     });
                                 }
 
-                                if documents.len() == 1 {
-                                    match documents.pop() {
-                                        Some(document) => {
-                                            match compiler::compile_document(map, &document).await {
-                                                compiler::HandlerCompilerResult::Success => {
-                                                    match compiler::get_compiled_filepath(&document.file) {
-                                                        Some(file_path) => {
-                                                            match crystalsoft_utils::read_file_buf(file_path) {
-                                                                    Ok(buffer) => HttpResponse::Ok()
-                                                                        .encoding(ContentEncoding::Identity)
-                                                                        .content_type("application/pdf")
-                                                                        .header("accept-ranges", "bytes")
-                                                                        .header(
-                                                                            "content-disposition",
-                                                                            "attachment; filename=\"compiled.pdf\"",
-                                                                        )
-                                                                        .body(buffer),
-                                                                    Err(e) => HttpResponse::NotFound().json(WsError {
-                                                                        error: format!("Error compiling the PDF: {:#?}", e),
-                                                                    })
-                                                                }
-                                                        }
-                                                        None => {
-                                                            HttpResponse::NotFound().json(WsError {
-                                                                error: "Error compiling the PDF"
-                                                                    .into(),
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                                compiler::HandlerCompilerResult::FillingError(e) => {
-                                                    HttpResponse::BadRequest()
-                                                        .json(WsError { error: format!("Error during document filling: {:#?}", e) })
-                                                }
-                                                compiler::HandlerCompilerResult::Error(message) => {
-                                                    HttpResponse::InternalServerError()
-                                                        .json(WsError { error: message })
-                                                }
-                                            }
-                                        }
-                                        None => unreachable!(),
-                                    }
-                                } else {
-                                    match compiler::compile_documents(map, &documents).await {
-                                        compiler::HandlerCompilerResult::Success => {
-                                            let merge = parameters.merge.unwrap_or(false);
-                                            let export_result = if merge {
-                                                compiler::merge_compiled_documents(&documents)
-                                            } else {
-                                                compiler::zip_compiled_documents(&documents)
-                                            };
+                                match compiler::compile_documents(map, &documents).await {
+                                    compiler::HandlerCompilerResult::Success => {
+                                        let merge = parameters.merge.unwrap_or(false);
+                                        let export_result = if merge {
+                                            compiler::merge_compiled_documents(documents)
+                                        } else {
+                                            compiler::zip_compiled_documents(documents)
+                                        };
 
-                                            match export_result {
-                                                compiler::ExportCompilerResult::Success(bytes) => {
-                                                    HttpResponse::Ok()
-                                                        .encoding(ContentEncoding::Identity)
-                                                        .content_type(format!(
-                                                            "{}",
-                                                            if merge {
-                                                                "application/pdf"
-                                                            } else {
-                                                                "application/zip"
-                                                            }
-                                                        ))
-                                                        .header("accept-ranges", "bytes")
-                                                        .header(
-                                                            "content-disposition",
-                                                            format!(
-                                                                "attachment; filename=\"pdfs.{}\"",
-                                                                if merge { "pdf" } else { "zip" }
-                                                            ),
-                                                        )
-                                                        .body(bytes)
-                                                }
-                                                compiler::ExportCompilerResult::Error(message) => {
-                                                    HttpResponse::InternalServerError()
-                                                        .json(WsError { error: message })
-                                                }
+                                        match export_result {
+                                            compiler::ExportCompilerResult::Success(bytes) => {
+                                                HttpResponse::Ok()
+                                                    .encoding(ContentEncoding::Identity)
+                                                    .content_type(format!(
+                                                        "{}",
+                                                        if merge {
+                                                            "application/pdf"
+                                                        } else {
+                                                            "application/zip"
+                                                        }
+                                                    ))
+                                                    .header("accept-ranges", "bytes")
+                                                    .header(
+                                                        "content-disposition",
+                                                        format!(
+                                                            "attachment; filename=\"pdfs.{}\"",
+                                                            if merge { "pdf" } else { "zip" }
+                                                        ),
+                                                    )
+                                                    .body(bytes)
+                                            }
+                                            compiler::ExportCompilerResult::Error(message) => {
+                                                HttpResponse::InternalServerError()
+                                                    .json(WsError { error: message })
                                             }
                                         }
-                                        compiler::HandlerCompilerResult::FillingError(e) => {
-                                            HttpResponse::BadRequest().json(WsError {
-                                                error: format!(
-                                                    "Error during document filling: {:#?}",
-                                                    e
-                                                ),
-                                            })
-                                        }
-                                        compiler::HandlerCompilerResult::Error(message) => {
-                                            HttpResponse::InternalServerError()
-                                                .json(WsError { error: message })
-                                        }
+                                    }
+                                    compiler::HandlerCompilerResult::FillingError(e) => {
+                                        HttpResponse::BadRequest().json(WsError {
+                                            error: format!(
+                                                "Error during document filling: {:#?}",
+                                                e
+                                            ),
+                                        })
+                                    }
+                                    compiler::HandlerCompilerResult::Error(message) => {
+                                        HttpResponse::InternalServerError()
+                                            .json(WsError { error: message })
                                     }
                                 }
                             } else {
