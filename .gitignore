@@ -1,3 +1,4 @@
+.idea
 .env
 /target
 /target/
@@ -8,3 +9,4 @@
 **/*.rs.bk
 /*.data
 /*.gz
+
