@@ -1,5 +1,5 @@
 # PDFiller
-PDF Form filler API with a built-in reverse proxy with Ngnix
+PDF Form filler API with a built-in reverse proxy with Nginx
 
 ## Running the web service
 The application uses `docker-compose` in order to run all the needed services. You have to install last Docker CE with Docker compose in order to run it.
@@ -27,7 +27,7 @@ Stopping:
 The following features aren't implemented yet:
 - [x] Image fields with a pattern for the field name
 - [x] Merge all PDFs into one PDF in addition to ZIP option (default)
-- [ ] Fix merged PDF order while uploaded or compiled
+- [x] Fix merged PDF order while uploaded or compiled
 - [ ] PDF's pages rasterization (flattening)
 - [ ] Files caching
 - [ ] Temporary files deletion monitor
