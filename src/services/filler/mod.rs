@@ -10,7 +10,6 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::data::Data;
-use crate::redis::models::document::Document;
 use crate::services::{self, WsError};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -35,9 +34,7 @@ pub async fn compile_documents(
                 if let Some(value) = values.get("data") {
                     match <compiler::PDFillerMap>::deserialize(value) {
                         Ok(ref map) => {
-                            if let Some(documents) =
-                                data.redis.get_all_by::<Document, _>(&token.0).await
-                            {
+                            if let Some(documents) = data.get_documents_by_token(&token.0).await {
                                 if documents.is_empty() {
                                     return HttpResponse::NotFound().json(WsError {
                                         error: "No documents found for this token!".into(),

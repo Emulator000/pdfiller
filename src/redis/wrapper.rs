@@ -1,4 +1,4 @@
-// use async_std::sync::Arc;
+use async_std::sync::Arc;
 
 use redis::RedisResult;
 
@@ -24,9 +24,10 @@ impl RedisWrapper {
         self.redis.get::<T, _>(Some(value)).await
     }
 
-    // pub async fn get<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
-    //     self.redis.get_one::<T, _>(value).await
-    // }
+    #[allow(dead_code)]
+    pub async fn get<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
+        self.redis.get_one::<T, _>(value).await
+    }
 
     pub async fn create<T: 'static + Model>(&self, model: T) -> RedisResult<()> {
         self.redis.insert::<T>(model).await

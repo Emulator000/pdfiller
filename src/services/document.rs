@@ -6,7 +6,7 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
 
-use crate::data::Data;
+use crate::data::{Data, DataResult};
 use crate::redis::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
@@ -98,9 +98,9 @@ pub async fn post_document(
                         file,
                     };
 
-                    match data.redis.create::<Document>(document.clone()).await {
-                        Ok(_) => HttpResponse::Created().json(document),
-                        Err(e) => HttpResponse::InternalServerError().json(WsError {
+                    match data.create_document(document.clone()).await {
+                        DataResult::Ok => HttpResponse::Created().json(document),
+                        DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
                             error: format!("An error occurred: {:#?}", e),
                         }),
                     }
@@ -128,7 +128,7 @@ pub async fn get_document(
     token: web::Path<String>,
     request: web::HttpRequest,
 ) -> impl Responder {
-    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+    if let Some(documents) = data.get_documents_by_token(&token.0).await {
         if documents.is_empty() {
             return HttpResponse::NotFound().json(WsError {
                 error: "No documents found for this token!".into(),
@@ -157,7 +157,7 @@ pub async fn get_document(
 
 #[get("/documents")]
 pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
-    if let Some(documents) = data.redis.get_all::<Document>().await {
+    if let Some(documents) = data.get_all_documents().await {
         HttpResponse::Ok().json(documents)
     } else {
         HttpResponse::NoContent().json(WsError {
@@ -171,7 +171,7 @@ pub async fn get_documents_by_token(
     data: web::Data<Data>,
     token: web::Path<String>,
 ) -> impl Responder {
-    if let Some(documents) = data.redis.get_all_by::<Document, _>(&token.0).await {
+    if let Some(documents) = data.get_documents_by_token(&token.0).await {
         HttpResponse::Ok().json(documents)
     } else {
         HttpResponse::NoContent().json(WsError {
