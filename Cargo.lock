@@ -2079,6 +2079,7 @@ dependencies = [
  "pdf_forms",
  "redis",
  "regex",
+ "reqwest",
  "rust-s3",
  "sanitize-filename",
  "sentry",

@@ -10,6 +10,7 @@
     actix-web = { version = "^3.2", features = ["rustls"] }
     actix-rt = "^1.1"
     actix-multipart = "^0.3"
+    reqwest = "^0.10"
     futures-lite = "^1.8"
     redis = "^0.17"
     serde = "^1.0"
