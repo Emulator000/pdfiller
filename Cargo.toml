@@ -30,6 +30,7 @@
     crystalsoft-utils = "^0.1"
     mime = "^0.3"
     chrono = "^0.4"
+    rust-s3 = { version = "^0.26", features = ["rustls-tls"] }
 
     # For static building
     openssl-sys = { version = "*", features = ["vendored"] }

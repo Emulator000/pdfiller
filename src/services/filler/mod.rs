@@ -41,13 +41,7 @@ pub async fn compile_documents(
                                     });
                                 }
 
-                                match compiler::compile_documents(
-                                    data.config.temp.as_str(),
-                                    map,
-                                    &documents,
-                                )
-                                .await
-                                {
+                                match compiler::compile_documents(map, &documents).await {
                                     compiler::HandlerCompilerResult::Success => {
                                         if let Some(accept) =
                                             services::get_accepted_header(&request)

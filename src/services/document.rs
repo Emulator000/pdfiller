@@ -1,6 +1,3 @@
-use std::fs;
-use std::io::Write;
-
 use actix_multipart::Multipart;
 use actix_web::{get, post, web, HttpResponse, Responder};
 
@@ -8,9 +5,8 @@ use futures_lite::stream::StreamExt;
 
 use chrono::Utc;
 
-use crate::client;
-use crate::config::ServiceConfig;
 use crate::data::{Data, DataResult};
+use crate::file::{File, FileResult};
 use crate::redis::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
@@ -37,9 +33,8 @@ pub async fn post_document(
     if let Some(accept) = services::get_accepted_header(&request) {
         if accept.as_str() == mime::APPLICATION_PDF {
             let mut filepath = None;
-
             if let Some(form) = form {
-                filepath = download_and_save(&data.config, form.file.as_str()).await;
+                filepath = data.file.download_and_save(form.file.as_str()).await;
             } else {
                 while let Ok(Some(mut field)) = payload.try_next().await {
                     match field.content_disposition() {
@@ -47,63 +42,30 @@ pub async fn post_document(
                             Some("file") => match content_type.get_filename() {
                                 Some(filename) => {
                                     if !filename.is_empty() {
-                                        match fs::create_dir_all(data.config.temp.as_str()) {
-                                            Ok(_) => {
-                                                let local_filepath = compiler::file_path(
-                                                    data.config.temp.as_str(),
-                                                    &filename,
-                                                );
-                                                filepath = Some(local_filepath.clone());
-
-                                                match web::block(|| {
-                                                    fs::File::create(local_filepath)
-                                                })
-                                                .await
-                                                {
-                                                    Ok(mut file) => {
-                                                        while let Some(chunk) = field.next().await {
-                                                            match chunk {
-                                                                Ok(data) => {
-                                                                    match web::block(move || {
-                                                                        file.write_all(&data)
-                                                                            .map(|_| file)
-                                                                    })
-                                                                    .await
-                                                                    {
-                                                                        Ok(f) => {
-                                                                            file = f;
-                                                                        }
-                                                                        Err(e) => {
-                                                                            sentry::capture_error(
-                                                                                &e,
-                                                                            );
-
-                                                                            return HttpResponse::InternalServerError().json(
-                                                                                WsError {
-                                                                                    error: format!("An error occurred during upload: {:#?}", e),
-                                                                                },
-                                                                            );
-                                                                        }
-                                                                    }
-                                                                }
-                                                                Err(e) => {
-                                                                    sentry::capture_error(&e);
-
-                                                                    filepath = None;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        sentry::capture_error(&e);
-
-                                                        filepath = None;
-                                                    }
+                                        let mut buf = Vec::new();
+                                        while let Some(chunk) = field.next().await {
+                                            match chunk {
+                                                Ok(data) => {
+                                                    buf.extend(data);
+                                                }
+                                                Err(e) => {
+                                                    sentry::capture_error(&e);
                                                 }
                                             }
-                                            Err(e) => {
+                                        }
+
+                                        let local_filepath = data.file.generate_filepath(&filename);
+                                        match File::save_file(&local_filepath, buf).await {
+                                            FileResult::Saved => {
+                                                filepath = Some(local_filepath);
+                                            }
+                                            FileResult::Error(e) => {
                                                 sentry::capture_error(&e);
                                             }
+                                            FileResult::BlockingError(e) => {
+                                                sentry::capture_error(&e);
+                                            }
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -120,7 +82,7 @@ pub async fn post_document(
 
                                     match std::str::from_utf8(buf.as_slice()) {
                                         Ok(uri) => {
-                                            filepath = download_and_save(&data.config, uri).await;
+                                            filepath = data.file.download_and_save(uri).await;
                                         }
                                         Err(e) => {
                                             sentry::capture_error(&e);
@@ -228,33 +190,4 @@ pub async fn get_documents_by_token(
             error: "No documents found!".into(),
         })
     }
-}
-
-async fn download_and_save<S: AsRef<str>>(config: &ServiceConfig, uri: S) -> Option<String> {
-    let mut filepath = None;
-    match client::get(uri.as_ref()).await {
-        Some(pdf) => {
-            let local_filepath = compiler::file_path(config.temp.as_str(), "file.pdf");
-            filepath = Some(local_filepath.clone());
-
-            match web::block(|| fs::File::create(local_filepath)).await {
-                Ok(mut file) => match file.write_all(&pdf) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        sentry::capture_error(&e);
-
-                        filepath = None;
-                    }
-                },
-                Err(e) => {
-                    sentry::capture_error(&e);
-
-                    filepath = None;
-                }
-            }
-        }
-        None => {}
-    }
-
-    filepath
 }

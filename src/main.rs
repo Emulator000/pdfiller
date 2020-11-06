@@ -4,6 +4,7 @@ extern crate serde_derive;
 mod client;
 mod config;
 mod data;
+mod file;
 mod logger;
 mod redis;
 mod services;
@@ -19,6 +20,7 @@ use actix_web::{
 
 use crate::config::Config;
 use crate::data::Data;
+use crate::file::File;
 use crate::redis::wrapper::RedisWrapper;
 use crate::redis::Redis;
 
@@ -29,7 +31,7 @@ async fn main() -> std::io::Result<()> {
     let _guard = sentry::init(config.sentry.dsn);
 
     let data = Data::new(
-        config.service.clone(),
+        File::new(config.service.clone()),
         RedisWrapper::new(Redis::new(&config.redis).await),
     );
 

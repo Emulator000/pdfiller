@@ -1,8 +1,6 @@
 use std::collections::HashMap;
-use std::fs;
 use std::io::{Cursor, SeekFrom};
 use std::io::{Seek, Write};
-use std::str;
 
 use serde_json::Value;
 
@@ -14,16 +12,13 @@ use bytes::Buf;
 
 use zip::write::FileOptions;
 
-use uuid::Uuid;
-
+use crate::file::{File, FileResult};
 use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
 use crate::services::filler::processor;
 
 pub type PDFillerMap = HashMap<String, Value>;
-
-pub const PATH_COMPILED: &'static str = "compiled/";
 
 pub enum HandlerCompilerResult {
     Success,
@@ -36,22 +31,12 @@ pub enum ExportCompilerResult {
     Error(String),
 }
 
-pub fn file_path<S: AsRef<str>>(path: S, filename: S) -> String {
-    format!(
-        "{}{}{}",
-        path.as_ref(),
-        Uuid::new_v4().to_string(),
-        sanitize_filename::sanitize(filename.as_ref())
-    )
-}
-
-pub async fn compile_documents<S: AsRef<str>>(
-    path: S,
+pub async fn compile_documents(
     map: &PDFillerMap,
     documents: &Vec<Document>,
 ) -> HandlerCompilerResult {
     for document in documents.iter() {
-        match compile_document(path.as_ref(), map, &document).await {
+        match compile_document(map, &document).await {
             HandlerCompilerResult::FillingError(e) => {
                 return HandlerCompilerResult::FillingError(e);
             }
@@ -65,26 +50,13 @@ pub async fn compile_documents<S: AsRef<str>>(
     HandlerCompilerResult::Success
 }
 
-pub async fn compile_document<S: AsRef<str>>(
-    path: S,
-    map: &PDFillerMap,
-    document: &Document,
-) -> HandlerCompilerResult {
+pub async fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompilerResult {
     match form::fields_filler(map, document).await {
         Ok(mut form) => {
-            if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
-                match fs::create_dir_all(format!("{}{}", path.as_ref(), PATH_COMPILED)) {
-                    Ok(_) => match form.save(&compiled_filename) {
-                        Ok(_) => HandlerCompilerResult::Success,
-                        Err(e) => {
-                            sentry::capture_error(&e);
-
-                            HandlerCompilerResult::Error(format!(
-                                "Error {:#?} saving a PDF file, aborted.",
-                                e
-                            ))
-                        }
-                    },
+            if let Some(compiled_filename) = File::get_compiled_filepath(&document.file) {
+                let mut buf = Vec::new();
+                match form.save_to(&mut buf) {
+                    Ok(_) => save_compiled_file(compiled_filename, buf).await,
                     Err(e) => {
                         sentry::capture_error(&e);
 
@@ -102,13 +74,10 @@ pub async fn compile_document<S: AsRef<str>>(
             FillingError::Load(e) => match e {
                 LoadError::LopdfError(e) => match e {
                     Error::DictKey => {
-                        if let Some(compiled_filename) = get_compiled_filepath(&document.file) {
-                            match fs::create_dir_all(PATH_COMPILED) {
-                                Ok(_) => {
-                                    let _ = std::fs::copy(&document.file, &compiled_filename);
-
-                                    HandlerCompilerResult::Success
-                                }
+                        if let Some(compiled_filename) = File::get_compiled_filepath(&document.file)
+                        {
+                            match crystalsoft_utils::read_file_buf(&document.file) {
+                                Ok(buf) => save_compiled_file(compiled_filename, buf).await,
                                 Err(e) => {
                                     sentry::capture_error(&e);
 
@@ -118,6 +87,22 @@ pub async fn compile_document<S: AsRef<str>>(
                                     ))
                                 }
                             }
+
+                        // match fs::create_dir_all(File::PATH_COMPILED) {
+                        //     Ok(_) => {
+                        //         let _ = std::fs::copy(&document.file, &compiled_filename);
+                        //
+                        //         HandlerCompilerResult::Success
+                        //     }
+                        //     Err(e) => {
+                        //         sentry::capture_error(&e);
+                        //
+                        //         HandlerCompilerResult::Error(format!(
+                        //             "Error {:#?} saving a PDF file, aborted.",
+                        //             e
+                        //         ))
+                        //     }
+                        // }
                         } else {
                             HandlerCompilerResult::Error(format!(
                                 "Error saving a PDF file, aborted.",
@@ -144,7 +129,7 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
         if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
                 Ok(_) => match if compiled {
-                    get_compiled_filepath(&document.file)
+                    File::get_compiled_filepath(&document.file)
                 } else {
                     Some(document.file)
                 } {
@@ -190,7 +175,7 @@ pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCo
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
         if let Some(ref file_name) = if compiled {
-            get_compiled_filepath(&document.file)
+            File::get_compiled_filepath(&document.file)
         } else {
             Some(document.file)
         } {
@@ -236,9 +221,19 @@ fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult {
     }
 }
 
-pub fn get_compiled_filepath<S: AsRef<str>>(filename: S) -> Option<String> {
-    match crystalsoft_utils::get_filename(filename) {
-        Some(file_name) => Some(format!("{}{}", PATH_COMPILED, file_name)),
-        None => None,
+async fn save_compiled_file(file_path: String, buf: Vec<u8>) -> HandlerCompilerResult {
+    match File::save_file(file_path, buf).await {
+        FileResult::Saved => HandlerCompilerResult::Success,
+        FileResult::Error(e) => {
+            sentry::capture_error(&e);
+
+            HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
+        }
+        FileResult::BlockingError(e) => {
+            sentry::capture_error(&e);
+
+            HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
+        }
+        _ => HandlerCompilerResult::Error("Error: cannot save the file.".into()),
     }
 }
