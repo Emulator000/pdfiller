@@ -2066,6 +2066,7 @@ dependencies = [
  "actix-web",
  "arc-swap",
  "async-std",
+ "async-trait",
  "bytes",
  "chrono",
  "crystalsoft-utils",

@@ -12,7 +12,8 @@ use bytes::Buf;
 
 use zip::write::FileOptions;
 
-use crate::file::{File, FileResult};
+use crate::data::FileType;
+use crate::file::{FileProvider, FileResult};
 use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
@@ -32,11 +33,12 @@ pub enum ExportCompilerResult {
 }
 
 pub async fn compile_documents(
+    file_type: FileType,
     map: &PDFillerMap,
     documents: &Vec<Document>,
 ) -> HandlerCompilerResult {
     for document in documents.iter() {
-        match compile_document(map, &document).await {
+        match compile_document(file_type.clone(), map, &document).await {
             HandlerCompilerResult::FillingError(e) => {
                 return HandlerCompilerResult::FillingError(e);
             }
@@ -50,13 +52,19 @@ pub async fn compile_documents(
     HandlerCompilerResult::Success
 }
 
-pub async fn compile_document(map: &PDFillerMap, document: &Document) -> HandlerCompilerResult {
+pub async fn compile_document(
+    file_type: FileType,
+    map: &PDFillerMap,
+    document: &Document,
+) -> HandlerCompilerResult {
     match form::fields_filler(map, document).await {
         Ok(mut form) => {
-            if let Some(compiled_filename) = File::get_compiled_filepath(&document.file) {
+            if let Some(compiled_filename) =
+                FileProvider::get_compiled_filepath(document.file.as_str())
+            {
                 let mut buf = Vec::new();
                 match form.save_to(&mut buf) {
-                    Ok(_) => save_compiled_file(compiled_filename, buf).await,
+                    Ok(_) => save_compiled_file(file_type, compiled_filename, buf).await,
                     Err(e) => {
                         sentry::capture_error(&e);
 
@@ -74,10 +82,13 @@ pub async fn compile_document(map: &PDFillerMap, document: &Document) -> Handler
             FillingError::Load(e) => match e {
                 LoadError::LopdfError(e) => match e {
                     Error::DictKey => {
-                        if let Some(compiled_filename) = File::get_compiled_filepath(&document.file)
+                        if let Some(compiled_filename) =
+                            FileProvider::get_compiled_filepath(&document.file)
                         {
                             match crystalsoft_utils::read_file_buf(&document.file) {
-                                Ok(buf) => save_compiled_file(compiled_filename, buf).await,
+                                Ok(buf) => {
+                                    save_compiled_file(file_type, compiled_filename, buf).await
+                                }
                                 Err(e) => {
                                     sentry::capture_error(&e);
 
@@ -129,7 +140,7 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
         if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
                 Ok(_) => match if compiled {
-                    File::get_compiled_filepath(&document.file)
+                    FileProvider::get_compiled_filepath(&document.file)
                 } else {
                     Some(document.file)
                 } {
@@ -175,7 +186,7 @@ pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCo
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
         if let Some(ref file_name) = if compiled {
-            File::get_compiled_filepath(&document.file)
+            FileProvider::get_compiled_filepath(&document.file)
         } else {
             Some(document.file)
         } {
@@ -221,8 +232,12 @@ fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult {
     }
 }
 
-async fn save_compiled_file(file_path: String, buf: Vec<u8>) -> HandlerCompilerResult {
-    match File::save_file(file_path, buf).await {
+async fn save_compiled_file(
+    file_type: FileType,
+    file_path: String,
+    buf: Vec<u8>,
+) -> HandlerCompilerResult {
+    match file_type.save_file(file_path, buf).await {
         FileResult::Saved => HandlerCompilerResult::Success,
         FileResult::Error(e) => {
             sentry::capture_error(&e);

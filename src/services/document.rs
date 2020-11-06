@@ -6,7 +6,7 @@ use futures_lite::stream::StreamExt;
 use chrono::Utc;
 
 use crate::data::{Data, DataResult};
-use crate::file::{File, FileResult};
+use crate::file::FileResult;
 use crate::redis::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
@@ -55,7 +55,7 @@ pub async fn post_document(
                                         }
 
                                         let local_filepath = data.file.generate_filepath(&filename);
-                                        match File::save_file(&local_filepath, buf).await {
+                                        match data.file.save_file(&local_filepath, buf).await {
                                             FileResult::Saved => {
                                                 filepath = Some(local_filepath);
                                             }

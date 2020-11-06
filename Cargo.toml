@@ -6,6 +6,7 @@
 
 [dependencies]
     async-std = "^1.6"
+    async-trait = "^0.1"
     actix-web = { version = "^3.0", features = ["rustls"] }
     actix-rt = "^1.1"
     actix-multipart = "^0.3"

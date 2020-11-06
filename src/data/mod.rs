@@ -1,8 +1,12 @@
+use async_std::sync::Arc;
+
 use redis::RedisError;
 
-use crate::file::File;
+use crate::file::FileProvider;
 use crate::redis::models::document::Document;
 use crate::redis::wrapper::RedisWrapper;
+
+pub type FileType = Arc<Box<dyn FileProvider>>;
 
 pub enum DataResult {
     Ok,
@@ -11,13 +15,16 @@ pub enum DataResult {
 
 #[derive(Clone)]
 pub struct Data {
-    pub file: File,
+    pub file: FileType,
     redis: RedisWrapper,
 }
 
 impl Data {
-    pub fn new(file: File, redis: RedisWrapper) -> Self {
-        Data { file, redis }
+    pub fn new(file: Box<dyn FileProvider>, redis: RedisWrapper) -> Self {
+        Data {
+            file: Arc::new(file),
+            redis,
+        }
     }
 
     pub async fn get_all_documents(&self) -> Option<Vec<Document>> {
