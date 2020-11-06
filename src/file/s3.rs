@@ -45,11 +45,7 @@ impl FileProvider for S3 {
     async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
         match self.bucket.put_object(file_path, &data).await {
             Ok((_data, _code)) => FileResult::Saved,
-            Err(e) => {
-                sentry::capture_error(&e);
-
-                FileResult::S3Error(e)
-            }
+            Err(e) => FileResult::S3Error(e),
         }
     }
 

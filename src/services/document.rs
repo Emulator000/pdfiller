@@ -51,6 +51,8 @@ pub async fn post_document(
                                                         filepath = Some(local_filepath);
                                                     }
                                                     FileResult::S3Error(e) => {
+                                                        sentry::capture_error(&e);
+
                                                         return HttpResponse::InternalServerError().json(WsError {
                                                             error: format!(
                                                                 "An error occurred uploading the file: {:#?}",
@@ -59,6 +61,8 @@ pub async fn post_document(
                                                         });
                                                     }
                                                     FileResult::Error(e) => {
+                                                        sentry::capture_error(&e);
+
                                                         return HttpResponse::InternalServerError().json(WsError {
                                                             error: format!(
                                                                 "An error occurred uploading the file: {:#?}",

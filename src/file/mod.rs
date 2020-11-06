@@ -49,6 +49,15 @@ pub trait FileProvider: Send + Sync {
                     FileResult::Saved => {
                         filepath = Some(remote_file_path.clone());
                     }
+                    FileResult::Error(e) => {
+                        sentry::capture_error(&e);
+                    }
+                    FileResult::S3Error(e) => {
+                        sentry::capture_error(&e);
+                    }
+                    FileResult::BlockingError(e) => {
+                        sentry::capture_error(&e);
+                    }
                     _ => {}
                 }
             }

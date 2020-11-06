@@ -33,24 +33,12 @@ impl FileProvider for Local {
                     match web::block(|| fs::File::create(file_path)).await {
                         Ok(mut file) => match file.write_all(&data) {
                             Ok(_) => FileResult::Saved,
-                            Err(e) => {
-                                sentry::capture_error(&e);
-
-                                FileResult::Error(e)
-                            }
+                            Err(e) => FileResult::Error(e),
                         },
-                        Err(e) => {
-                            sentry::capture_error(&e);
-
-                            FileResult::BlockingError(e)
-                        }
+                        Err(e) => FileResult::BlockingError(e),
                     }
                 }
-                Err(e) => {
-                    sentry::capture_error(&e);
-
-                    FileResult::Error(e)
-                }
+                Err(e) => FileResult::Error(e),
             },
             None => FileResult::NotSaved,
         }
