@@ -27,22 +27,25 @@ impl FileProvider for Local {
 
     async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
         match crystalsoft_utils::get_filepath(file_path) {
-            Some(filepath) => match fs::create_dir_all::<&str>(filepath.as_str()) {
-                Ok(_) => match web::block(|| fs::File::create(filepath)).await {
-                    Ok(mut file) => match file.write_all(&data) {
-                        Ok(_) => FileResult::Saved,
+            Some(path) => match fs::create_dir_all(path) {
+                Ok(_) => {
+                    let file_path: String = file_path.into();
+                    match web::block(|| fs::File::create(file_path)).await {
+                        Ok(mut file) => match file.write_all(&data) {
+                            Ok(_) => FileResult::Saved,
+                            Err(e) => {
+                                sentry::capture_error(&e);
+
+                                FileResult::Error(e)
+                            }
+                        },
                         Err(e) => {
                             sentry::capture_error(&e);
 
-                            FileResult::Error(e)
+                            FileResult::BlockingError(e)
                         }
-                    },
-                    Err(e) => {
-                        sentry::capture_error(&e);
-
-                        FileResult::BlockingError(e)
                     }
-                },
+                }
                 Err(e) => {
                     sentry::capture_error(&e);
 
