@@ -27,7 +27,6 @@ pub enum FileResult {
 pub enum FileError {
     IoError(Error),
     S3Error(S3Error),
-    GenericError,
 }
 
 #[async_trait]

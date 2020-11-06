@@ -200,9 +200,6 @@ pub async fn merge_documents<F: FileProvider + ?Sized>(
 
                         ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
                     }
-                    FileError::GenericError => {
-                        ExportCompilerResult::Error("Generic error loading the PDF.".into())
-                    }
                 },
             }
         } else {

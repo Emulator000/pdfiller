@@ -37,26 +37,14 @@ impl S3 {
 impl FileProvider for S3 {
     async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError> {
         match self.bucket.get_object(file_path).await {
-            Ok((data, code)) => {
-                if code != 200 {
-                    return Err(FileError::GenericError);
-                }
-
-                Ok(data)
-            }
+            Ok((data, _code)) => Ok(data),
             Err(e) => Err(FileError::S3Error(e)),
         }
     }
 
     async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
         match self.bucket.put_object(file_path, &data).await {
-            Ok((_data, code)) => {
-                if code != 204 {
-                    return FileResult::NotSaved;
-                }
-
-                FileResult::Saved
-            }
+            Ok((_data, _code)) => FileResult::Saved,
             Err(e) => {
                 sentry::capture_error(&e);
 
