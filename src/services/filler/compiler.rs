@@ -13,7 +13,7 @@ use bytes::Buf;
 use zip::write::FileOptions;
 
 use crate::data::FileType;
-use crate::file::FileResult;
+use crate::file::{self, FileResult};
 use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
@@ -59,8 +59,7 @@ pub async fn compile_document(
 ) -> HandlerCompilerResult {
     match form::fields_filler(map, document).await {
         Ok(mut form) => {
-            if let Some(compiled_filename) = file_type.get_compiled_filepath(document.file.as_str())
-            {
+            if let Some(compiled_filename) = file::get_compiled_filepath(document.file.as_str()) {
                 let mut buf = Vec::new();
                 match form.save_to(&mut buf) {
                     Ok(_) => save_compiled_file(file_type, compiled_filename, buf).await,
@@ -81,8 +80,7 @@ pub async fn compile_document(
             FillingError::Load(e) => match e {
                 LoadError::LopdfError(e) => match e {
                     Error::DictKey => {
-                        if let Some(compiled_filename) =
-                            file_type.get_compiled_filepath(&document.file)
+                        if let Some(compiled_filename) = file::get_compiled_filepath(&document.file)
                         {
                             match crystalsoft_utils::read_file_buf(&document.file) {
                                 Ok(buf) => {
@@ -114,11 +112,7 @@ pub async fn compile_document(
     }
 }
 
-pub fn zip_documents(
-    file_type: FileType,
-    documents: Vec<Document>,
-    compiled: bool,
-) -> ExportCompilerResult {
+pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
     let buf = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
@@ -127,7 +121,7 @@ pub fn zip_documents(
         if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
                 Ok(_) => match if compiled {
-                    file_type.get_compiled_filepath(&document.file)
+                    file::get_compiled_filepath(&document.file)
                 } else {
                     Some(document.file)
                 } {
@@ -169,15 +163,11 @@ pub fn zip_documents(
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-pub fn merge_documents(
-    file_type: FileType,
-    mut documents: Vec<Document>,
-    compiled: bool,
-) -> ExportCompilerResult {
+pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
         if let Some(ref file_name) = if compiled {
-            file_type.get_compiled_filepath(&document.file)
+            file::get_compiled_filepath(&document.file)
         } else {
             Some(document.file)
         } {
@@ -193,7 +183,7 @@ pub fn merge_documents(
             ExportCompilerResult::Error(format!("Error getting the compiled PDF file."))
         }
     } else {
-        let documents_objects = processor::get_documents_containers(file_type, documents);
+        let documents_objects = processor::get_documents_containers(documents);
         if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
             ExportCompilerResult::Error("Cannot extract PDFs documents".into())
         } else {

@@ -23,14 +23,14 @@ impl S3 {
 #[async_trait]
 impl FileProvider for S3 {
     fn generate_filepath(&self, file_name: &str) -> String {
-        self.file_path(self.config.path.as_str(), file_name)
+        super::file_path(self.config.path.as_str(), file_name)
     }
 
     async fn download_and_save(&self, uri: &str) -> Option<String> {
         let mut filepath = None;
         match client::get(uri).await {
             Some(pdf) => {
-                let local_filepath = self.file_path(self.config.path.as_str(), "file.pdf");
+                let local_filepath = super::file_path(self.config.path.as_str(), "file.pdf");
                 match self.save_file(local_filepath.as_str(), pdf).await {
                     FileResult::Saved => {
                         filepath = Some(local_filepath.clone());
