@@ -1,4 +1,4 @@
-use actix_multipart::Multipart;
+use actix_multipart::{Field, Multipart, MultipartError};
 use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
@@ -42,47 +42,73 @@ pub async fn post_document(
                             Some("file") => match content_type.get_filename() {
                                 Some(filename) => {
                                     if !filename.is_empty() {
-                                        let mut buf = Vec::new();
-                                        while let Some(chunk) = field.next().await {
-                                            match chunk {
-                                                Ok(data) => {
-                                                    buf.extend(data);
-                                                }
-                                                Err(e) => {
-                                                    sentry::capture_error(&e);
+                                        match read_chuncked_buffer(&mut field).await {
+                                            Ok(buf) => {
+                                                let local_filepath =
+                                                    data.file.generate_filepath(&filename);
+                                                match data.file.save(&local_filepath, buf).await {
+                                                    FileResult::Saved => {
+                                                        filepath = Some(local_filepath);
+                                                    }
+                                                    FileResult::S3Error(e) => {
+                                                        return HttpResponse::InternalServerError().json(WsError {
+                                                            error: format!(
+                                                                "An error occurred uploading the file: {:#?}",
+                                                                e
+                                                            ),
+                                                        });
+                                                    }
+                                                    FileResult::Error(e) => {
+                                                        return HttpResponse::InternalServerError().json(WsError {
+                                                            error: format!(
+                                                                "An error occurred uploading the file: {:#?}",
+                                                                e
+                                                            ),
+                                                        });
+                                                    }
+                                                    _ => {}
                                                 }
                                             }
-                                        }
+                                            Err(e) => {
+                                                sentry::capture_error(&e);
 
-                                        let local_filepath = data.file.generate_filepath(&filename);
-                                        match data.file.save(&local_filepath, buf).await {
-                                            FileResult::Saved => {
-                                                filepath = Some(local_filepath);
+                                                return HttpResponse::InternalServerError().json(WsError {
+                                                    error: format!(
+                                                        "An error occurred uploading the file: {:#?}",
+                                                        e
+                                                    ),
+                                                });
                                             }
-                                            _ => {}
                                         }
                                     }
                                 }
-                                None => {
-                                    let mut buf = Vec::new();
-                                    while let Some(chunk) = field.next().await {
-                                        match chunk {
-                                            Ok(data) => {
-                                                buf.extend(data);
-                                            }
-                                            Err(_) => {}
-                                        }
-                                    }
-
-                                    match std::str::from_utf8(buf.as_slice()) {
+                                None => match read_chuncked_buffer(&mut field).await {
+                                    Ok(buf) => match std::str::from_utf8(buf.as_slice()) {
                                         Ok(uri) => {
                                             filepath = data.file.download_and_save(uri).await;
                                         }
                                         Err(e) => {
                                             sentry::capture_error(&e);
+
+                                            return HttpResponse::InternalServerError().json(WsError {
+                                                error: format!(
+                                                    "An error occurred downloading the remote file: {:#?}",
+                                                    e
+                                                ),
+                                            });
                                         }
+                                    },
+                                    Err(e) => {
+                                        sentry::capture_error(&e);
+
+                                        return HttpResponse::InternalServerError().json(WsError {
+                                            error: format!(
+                                                "An error occurred uploading the file: {:#?}",
+                                                e
+                                            ),
+                                        });
                                     }
-                                }
+                                },
                             },
                             Some(_) => {}
                             None => {}
@@ -94,7 +120,7 @@ pub async fn post_document(
 
             if filepath.is_none() {
                 HttpResponse::BadRequest().json(WsError {
-                    error: format!("File missing."),
+                    error: "File missing.".into(),
                 })
             } else {
                 if let Some(file) = filepath {
@@ -112,7 +138,7 @@ pub async fn post_document(
                     }
                 } else {
                     HttpResponse::InternalServerError().json(WsError {
-                        error: format!("An error occurred"),
+                        error: "An error occurred".into(),
                     })
                 }
             }
@@ -184,4 +210,20 @@ pub async fn get_documents_by_token(
             error: "No documents found!".into(),
         })
     }
+}
+
+async fn read_chuncked_buffer(field: &mut Field) -> Result<Vec<u8>, MultipartError> {
+    let mut buf = Vec::new();
+    while let Some(chunk) = field.next().await {
+        match chunk {
+            Ok(data) => {
+                buf.extend(data);
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    }
+
+    Ok(buf)
 }
