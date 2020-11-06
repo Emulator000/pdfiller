@@ -200,6 +200,9 @@ pub async fn merge_documents<F: FileProvider + ?Sized>(
 
                         ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
                     }
+                    FileError::GenericError => {
+                        ExportCompilerResult::Error("Generic error loading the PDF.".into())
+                    }
                 },
             }
         } else {
@@ -244,13 +247,12 @@ async fn save_compiled_file<F: FileProvider + ?Sized>(
     match file_type.save(file_path.as_str(), buf).await {
         FileResult::Saved => HandlerCompilerResult::Success,
         FileResult::Error(e) => {
-            sentry::capture_error(&e);
-
             HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
         }
         FileResult::BlockingError(e) => {
-            sentry::capture_error(&e);
-
+            HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
+        }
+        FileResult::S3Error(e) => {
             HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
         }
         _ => HandlerCompilerResult::Error("Error: cannot save the file.".into()),

@@ -20,12 +20,14 @@ pub enum FileResult {
     NotSaved,
     Error(Error),
     BlockingError(BlockingError<Error>),
+    S3Error(S3Error),
 }
 
 #[derive(Debug)]
 pub enum FileError {
     IoError(Error),
     S3Error(S3Error),
+    GenericError,
 }
 
 #[async_trait]

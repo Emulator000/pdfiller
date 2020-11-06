@@ -59,12 +59,6 @@ pub async fn post_document(
                                             FileResult::Saved => {
                                                 filepath = Some(local_filepath);
                                             }
-                                            FileResult::Error(e) => {
-                                                sentry::capture_error(&e);
-                                            }
-                                            FileResult::BlockingError(e) => {
-                                                sentry::capture_error(&e);
-                                            }
                                             _ => {}
                                         }
                                     }

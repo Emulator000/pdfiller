@@ -1,9 +1,4 @@
-use std::fs;
-use std::io::Write;
-
 use async_trait::async_trait;
-
-use actix_web::web;
 
 use s3::creds::Credentials;
 use s3::Bucket;
@@ -41,34 +36,32 @@ impl S3 {
 #[async_trait]
 impl FileProvider for S3 {
     async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError> {
-        crystalsoft_utils::read_file_buf(file_path).map_err(|e| FileError::IoError(e))
+        match self.bucket.get_object(file_path).await {
+            Ok((data, code)) => {
+                if code != 200 {
+                    return Err(FileError::GenericError);
+                }
+
+                Ok(data)
+            }
+            Err(e) => Err(FileError::S3Error(e)),
+        }
     }
 
     async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
-        match crystalsoft_utils::get_filepath::<&str>(file_path) {
-            Some(filepath) => match fs::create_dir_all(filepath.as_str()) {
-                Ok(_) => match web::block(|| fs::File::create(filepath)).await {
-                    Ok(mut file) => match file.write_all(&data) {
-                        Ok(_) => FileResult::Saved,
-                        Err(e) => {
-                            sentry::capture_error(&e);
-
-                            FileResult::Error(e)
-                        }
-                    },
-                    Err(e) => {
-                        sentry::capture_error(&e);
-
-                        FileResult::BlockingError(e)
-                    }
-                },
-                Err(e) => {
-                    sentry::capture_error(&e);
-
-                    FileResult::Error(e)
+        match self.bucket.put_object(file_path, &data).await {
+            Ok((_data, code)) => {
+                if code != 204 {
+                    return FileResult::NotSaved;
                 }
-            },
-            None => FileResult::NotSaved,
+
+                FileResult::Saved
+            }
+            Err(e) => {
+                sentry::capture_error(&e);
+
+                FileResult::S3Error(e)
+            }
         }
     }
 
