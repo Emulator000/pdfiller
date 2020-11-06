@@ -17,6 +17,8 @@ pub struct ServiceConfig {
     pub filesystem: String,
     pub s3_access_key: Option<String>,
     pub s3_secret_key: Option<String>,
+    pub s3_bucket: Option<String>,
+    pub s3_region: Option<String>,
     pub path: String,
 }
 

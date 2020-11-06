@@ -5,9 +5,8 @@ use async_trait::async_trait;
 
 use actix_web::web;
 
-use crate::client;
 use crate::config::ServiceConfig;
-use crate::file::{FileProvider, FileResult};
+use crate::file::{FileError, FileProvider, FileResult};
 
 #[derive(Clone)]
 pub struct Local {
@@ -22,29 +21,11 @@ impl Local {
 
 #[async_trait]
 impl FileProvider for Local {
-    fn generate_filepath(&self, file_name: &str) -> String {
-        super::file_path(self.config.path.as_str(), file_name)
+    async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError> {
+        crystalsoft_utils::read_file_buf(file_path).map_err(|e| FileError::IoError(e))
     }
 
-    async fn download_and_save(&self, uri: &str) -> Option<String> {
-        let mut filepath = None;
-        match client::get(uri).await {
-            Some(pdf) => {
-                let local_filepath = super::file_path(self.config.path.as_str(), "file.pdf");
-                match self.save_file(local_filepath.as_str(), pdf).await {
-                    FileResult::Saved => {
-                        filepath = Some(local_filepath.clone());
-                    }
-                    _ => {}
-                }
-            }
-            None => {}
-        }
-
-        filepath
-    }
-
-    async fn save_file(&self, file_path: &str, data: Vec<u8>) -> FileResult {
+    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
         match crystalsoft_utils::get_filepath(file_path) {
             Some(filepath) => match fs::create_dir_all::<&str>(filepath.as_str()) {
                 Ok(_) => match web::block(|| fs::File::create(filepath)).await {
@@ -70,5 +51,9 @@ impl FileProvider for Local {
             },
             None => FileResult::NotSaved,
         }
+    }
+
+    fn base_path(&self) -> &str {
+        self.config.path.as_str()
     }
 }

@@ -5,46 +5,46 @@ use async_trait::async_trait;
 
 use actix_web::web;
 
-use crate::client;
+use s3::creds::Credentials;
+use s3::Bucket;
+
 use crate::config::ServiceConfig;
-use crate::file::{FileProvider, FileResult};
+use crate::file::{FileError, FileProvider, FileResult};
 
 #[derive(Clone)]
 pub struct S3 {
     config: ServiceConfig,
+    bucket: Bucket,
 }
 
 impl S3 {
     pub fn new(config: ServiceConfig) -> Self {
-        Self { config }
+        Self {
+            bucket: Bucket::new(
+                config.s3_bucket.as_deref().unwrap(),
+                config.s3_region.as_deref().unwrap().parse().unwrap(),
+                Credentials::new(
+                    config.s3_access_key.as_deref(),
+                    config.s3_secret_key.as_deref(),
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+            config,
+        }
     }
 }
 
 #[async_trait]
 impl FileProvider for S3 {
-    fn generate_filepath(&self, file_name: &str) -> String {
-        super::file_path(self.config.path.as_str(), file_name)
+    async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError> {
+        crystalsoft_utils::read_file_buf(file_path).map_err(|e| FileError::IoError(e))
     }
 
-    async fn download_and_save(&self, uri: &str) -> Option<String> {
-        let mut filepath = None;
-        match client::get(uri).await {
-            Some(pdf) => {
-                let local_filepath = super::file_path(self.config.path.as_str(), "file.pdf");
-                match self.save_file(local_filepath.as_str(), pdf).await {
-                    FileResult::Saved => {
-                        filepath = Some(local_filepath.clone());
-                    }
-                    _ => {}
-                }
-            }
-            None => {}
-        }
-
-        filepath
-    }
-
-    async fn save_file(&self, file_path: &str, data: Vec<u8>) -> FileResult {
+    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
         match crystalsoft_utils::get_filepath::<&str>(file_path) {
             Some(filepath) => match fs::create_dir_all(filepath.as_str()) {
                 Ok(_) => match web::block(|| fs::File::create(filepath)).await {
@@ -70,5 +70,9 @@ impl FileProvider for S3 {
             },
             None => FileResult::NotSaved,
         }
+    }
+
+    fn base_path(&self) -> &str {
+        self.config.path.as_str()
     }
 }

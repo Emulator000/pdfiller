@@ -9,6 +9,10 @@ use actix_rt::blocking::BlockingError;
 
 use uuid::Uuid;
 
+use ::s3::S3Error;
+
+use crate::client;
+
 pub const PATH_COMPILED: &'static str = "compiled/";
 
 pub enum FileResult {
@@ -18,22 +22,46 @@ pub enum FileResult {
     BlockingError(BlockingError<Error>),
 }
 
-#[async_trait]
-pub trait FileProvider: Send + Sync {
-    fn generate_filepath(&self, file_name: &str) -> String;
-
-    async fn download_and_save(&self, uri: &str) -> Option<String>;
-
-    async fn save_file(&self, file_path: &str, data: Vec<u8>) -> FileResult;
+#[derive(Debug)]
+pub enum FileError {
+    IoError(Error),
+    S3Error(S3Error),
 }
 
-pub fn file_path<S: AsRef<str>>(path: S, filename: S) -> String {
-    format!(
-        "{}{}{}",
-        path.as_ref(),
-        Uuid::new_v4().to_string(),
-        sanitize_filename::sanitize(filename.as_ref())
-    )
+#[async_trait]
+pub trait FileProvider: Send + Sync {
+    fn generate_filepath(&self, file_name: &str) -> String {
+        format!(
+            "{}{}{}",
+            self.base_path(),
+            Uuid::new_v4().to_string(),
+            sanitize_filename::sanitize(file_name)
+        )
+    }
+
+    async fn download_and_save(&self, uri: &str) -> Option<String> {
+        let mut filepath = None;
+        match client::get(uri).await {
+            Some(pdf) => {
+                let remote_file_path = self.generate_filepath("file.pdf");
+                match self.save(remote_file_path.as_str(), pdf).await {
+                    FileResult::Saved => {
+                        filepath = Some(remote_file_path.clone());
+                    }
+                    _ => {}
+                }
+            }
+            None => {}
+        }
+
+        filepath
+    }
+
+    async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError>;
+
+    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult;
+
+    fn base_path(&self) -> &str;
 }
 
 pub fn get_compiled_filepath<S: AsRef<str>>(file_path: S) -> Option<String> {

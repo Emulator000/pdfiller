@@ -55,7 +55,7 @@ pub async fn post_document(
                                         }
 
                                         let local_filepath = data.file.generate_filepath(&filename);
-                                        match data.file.save_file(&local_filepath, buf).await {
+                                        match data.file.save(&local_filepath, buf).await {
                                             FileResult::Saved => {
                                                 filepath = Some(local_filepath);
                                             }
@@ -149,9 +149,9 @@ pub async fn get_document(
 
         if let Some(accept) = services::get_accepted_header(&request) {
             let export_result = if accept.as_str() == mime::APPLICATION_PDF {
-                compiler::merge_documents(documents, false)
+                compiler::merge_documents(data.file.clone(), documents, false).await
             } else {
-                compiler::zip_documents(documents, false)
+                compiler::zip_documents(data.file.clone(), documents, false).await
             };
 
             services::export_content(accept, export_result)

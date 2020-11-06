@@ -14,7 +14,7 @@ use bytes::Buf;
 
 use zip::write::FileOptions;
 
-use crate::file::{self, FileProvider, FileResult};
+use crate::file::{self, FileError, FileProvider, FileResult};
 use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
@@ -113,7 +113,11 @@ pub async fn compile_document<F: FileProvider + ?Sized>(
     }
 }
 
-pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
+pub async fn zip_documents<F: FileProvider + ?Sized>(
+    file_type: Arc<Box<F>>,
+    documents: Vec<Document>,
+    compiled: bool,
+) -> ExportCompilerResult {
     let buf = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
@@ -126,7 +130,7 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
                 } else {
                     Some(document.file)
                 } {
-                    Some(ref file_name) => match crystalsoft_utils::read_file_buf(file_name) {
+                    Some(ref file_path) => match file_type.load(file_path).await {
                         Ok(buffer) => match zip.write_all(&buffer) {
                             Ok(_) => {}
                             Err(e) => {
@@ -164,21 +168,39 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
+pub async fn merge_documents<F: FileProvider + ?Sized>(
+    file_type: Arc<Box<F>>,
+    mut documents: Vec<Document>,
+    compiled: bool,
+) -> ExportCompilerResult {
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
-        if let Some(ref file_name) = if compiled {
+        if let Some(ref file_path) = if compiled {
             file::get_compiled_filepath(&document.file)
         } else {
             Some(document.file)
         } {
-            match PdfDocument::load(file_name) {
-                Ok(mut document) => get_document_buffer(&mut document),
-                Err(e) => {
-                    sentry::capture_error(&e);
+            match file_type.load(file_path).await {
+                Ok(buffer) => match PdfDocument::load_mem(&buffer) {
+                    Ok(mut document) => get_document_buffer(&mut document),
+                    Err(e) => {
+                        sentry::capture_error(&e);
 
-                    ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
-                }
+                        ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
+                    }
+                },
+                Err(error) => match error {
+                    FileError::IoError(e) => {
+                        sentry::capture_error(&e);
+
+                        ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
+                    }
+                    FileError::S3Error(e) => {
+                        sentry::capture_error(&e);
+
+                        ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
+                    }
+                },
             }
         } else {
             ExportCompilerResult::Error(format!("Error getting the compiled PDF file."))
@@ -219,7 +241,7 @@ async fn save_compiled_file<F: FileProvider + ?Sized>(
     file_path: String,
     buf: Vec<u8>,
 ) -> HandlerCompilerResult {
-    match file_type.save_file(file_path.as_str(), buf).await {
+    match file_type.save(file_path.as_str(), buf).await {
         FileResult::Saved => HandlerCompilerResult::Success,
         FileResult::Error(e) => {
             sentry::capture_error(&e);
