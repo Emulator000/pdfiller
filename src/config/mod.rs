@@ -14,7 +14,12 @@ pub struct Config {
 
 #[derive(Clone, Deserialize)]
 pub struct ServiceConfig {
-    pub temp: String,
+    pub filesystem: String,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+    pub s3_bucket: Option<String>,
+    pub s3_region: Option<String>,
+    pub path: String,
 }
 
 #[derive(Clone, Deserialize)]

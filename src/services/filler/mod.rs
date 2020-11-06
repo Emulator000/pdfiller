@@ -42,7 +42,7 @@ pub async fn compile_documents(
                                 }
 
                                 match compiler::compile_documents(
-                                    data.config.temp.as_str(),
+                                    data.file.clone(),
                                     map,
                                     &documents,
                                 )
@@ -54,9 +54,19 @@ pub async fn compile_documents(
                                         {
                                             let export_result =
                                                 if accept.as_str() == mime::APPLICATION_PDF {
-                                                    compiler::merge_documents(documents, true)
+                                                    compiler::merge_documents(
+                                                        data.file.clone(),
+                                                        documents,
+                                                        true,
+                                                    )
+                                                    .await
                                                 } else {
-                                                    compiler::zip_documents(documents, true)
+                                                    compiler::zip_documents(
+                                                        data.file.clone(),
+                                                        documents,
+                                                        true,
+                                                    )
+                                                    .await
                                                 };
 
                                             services::export_content(accept, export_result)

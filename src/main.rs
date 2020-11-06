@@ -4,6 +4,7 @@ extern crate serde_derive;
 mod client;
 mod config;
 mod data;
+mod file;
 mod logger;
 mod redis;
 mod services;
@@ -19,8 +20,12 @@ use actix_web::{
 
 use crate::config::Config;
 use crate::data::Data;
+use crate::file::local::Local;
+use crate::file::s3::S3;
 use crate::redis::wrapper::RedisWrapper;
 use crate::redis::Redis;
+
+const API_VERSION: &'static str = "v1";
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
@@ -29,7 +34,11 @@ async fn main() -> std::io::Result<()> {
     let _guard = sentry::init(config.sentry.dsn);
 
     let data = Data::new(
-        config.service.clone(),
+        if config.service.filesystem == "local" {
+            Box::new(Local::new(config.service.clone()))
+        } else {
+            Box::new(S3::new(config.service.clone()))
+        },
         RedisWrapper::new(Redis::new(&config.redis).await),
     );
 
@@ -38,7 +47,7 @@ async fn main() -> std::io::Result<()> {
             .data(data.clone())
             .wrap(NormalizePath::new(TrailingSlash::Trim))
             .wrap(Logger::default())
-            .service(web::scope("/api/v1").configure(services::config))
+            .service(web::scope(&format!("/api/{}", API_VERSION)).configure(services::config))
     })
     .bind(format!(
         "{}:{}",

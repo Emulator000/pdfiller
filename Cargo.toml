@@ -6,9 +6,11 @@
 
 [dependencies]
     async-std = "^1.6"
-    actix-web = { version = "^3.0", features = ["rustls"] }
+    async-trait = "^0.1"
+    actix-web = { version = "^3.2", features = ["rustls"] }
     actix-rt = "^1.1"
     actix-multipart = "^0.3"
+    reqwest = "^0.10"
     futures-lite = "^1.8"
     redis = "^0.17"
     serde = "^1.0"
@@ -30,6 +32,7 @@
     crystalsoft-utils = "^0.1"
     mime = "^0.3"
     chrono = "^0.4"
+    rust-s3 = { version = "^0.26", features = ["rustls-tls"] }
 
     # For static building
     openssl-sys = { version = "*", features = ["vendored"] }

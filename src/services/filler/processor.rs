@@ -3,9 +3,9 @@ use std::str;
 
 use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 
+use crate::file;
 use crate::logger::Logger;
 use crate::redis::models::document::Document;
-use crate::services::filler::compiler;
 
 const PDF_VERSION: &'static str = "1.5";
 
@@ -21,7 +21,7 @@ pub fn get_documents_containers(documents: Vec<Document>) -> DocumentObjects {
     let mut documents_objects = BTreeMap::new();
 
     for document in documents {
-        if let Some(ref file_name) = compiler::get_compiled_filepath(&document.file) {
+        if let Some(ref file_name) = file::get_compiled_filepath(&document.file) {
             match PdfDocument::load(file_name) {
                 Ok(mut document) => {
                     document.renumber_objects_with(max_id);
