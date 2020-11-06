@@ -22,15 +22,15 @@ impl Local {
 
 #[async_trait]
 impl FileProvider for Local {
-    fn generate_filepath<S: AsRef<str>>(&self, file_name: S) -> String {
-        Self::file_path(self.config.path.as_str(), file_name.as_ref())
+    fn generate_filepath(&self, file_name: &str) -> String {
+        self.file_path(self.config.path.as_str(), file_name)
     }
 
-    async fn download_and_save<S: AsRef<str>>(&self, uri: S) -> Option<String> {
+    async fn download_and_save(&self, uri: &str) -> Option<String> {
         let mut filepath = None;
-        match client::get(uri.as_ref()).await {
+        match client::get(uri).await {
             Some(pdf) => {
-                let local_filepath = Self::file_path(self.config.path.as_str(), "file.pdf");
+                let local_filepath = self.file_path(self.config.path.as_str(), "file.pdf");
                 match self.save_file(local_filepath.as_str(), pdf).await {
                     FileResult::Saved => {
                         filepath = Some(local_filepath.clone());
@@ -44,10 +44,10 @@ impl FileProvider for Local {
         filepath
     }
 
-    async fn save_file<S: AsRef<str>>(&self, file_path: S, data: Vec<u8>) -> FileResult {
-        match crystalsoft_utils::get_filepath::<&str>(file_path.as_ref()) {
-            Some(filepath) => match fs::create_dir_all::<&str>(filepath.as_ref()) {
-                Ok(_) => match web::block(|| fs::File::create::<String>(filepath)).await {
+    async fn save_file(&self, file_path: &str, data: Vec<u8>) -> FileResult {
+        match crystalsoft_utils::get_filepath(file_path) {
+            Some(filepath) => match fs::create_dir_all::<&str>(filepath.as_str()) {
+                Ok(_) => match web::block(|| fs::File::create(filepath)).await {
                     Ok(mut file) => match file.write_all(&data) {
                         Ok(_) => FileResult::Saved,
                         Err(e) => {

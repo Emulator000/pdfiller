@@ -1,22 +1,15 @@
 use std::str;
 
-use actix_web::client::{Client, ClientRequest};
+use actix_web::client::Client;
 
 use serde::Serialize;
 
 const USER_AGENT_KEY: &'static str = "User-Agent";
 const UA: &'static str = "PDFiller";
 
-#[allow(unused_mut)]
-fn get_client(mut request: ClientRequest) -> ClientRequest {
-    request
-}
-
 pub async fn get<S: AsRef<str>>(uri: S) -> Option<Vec<u8>> {
-    let response = get_client(Client::default().get(uri.as_ref()))
-        .header(USER_AGENT_KEY, UA)
-        .send()
-        .await;
+    let client_request = Client::default().get(uri.as_ref());
+    let response = client_request.header(USER_AGENT_KEY, UA).send().await;
 
     match response {
         Ok(mut response) => match response.body().await {
@@ -29,7 +22,8 @@ pub async fn get<S: AsRef<str>>(uri: S) -> Option<Vec<u8>> {
 
 #[allow(dead_code)]
 pub async fn post<S: AsRef<str>, D: Serialize>(uri: S, request: D) -> Option<Vec<u8>> {
-    let response = get_client(Client::default().post(uri.as_ref()))
+    let client_request = Client::default().post(uri.as_ref());
+    let response = client_request
         .header(USER_AGENT_KEY, UA)
         .send_json(&request)
         .await;

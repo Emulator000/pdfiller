@@ -19,38 +19,26 @@ pub enum FileResult {
 }
 
 #[async_trait]
-pub trait FileProvider {
-    fn file_path<S: AsRef<str>>(path: S, filename: S) -> String
-    where
-        Self: Sized,
-    {
+pub trait FileProvider: Send + Sync {
+    fn file_path(&self, path: &str, filename: &str) -> String {
         format!(
             "{}{}{}",
-            path.as_ref(),
+            path,
             Uuid::new_v4().to_string(),
-            sanitize_filename::sanitize(filename.as_ref())
+            sanitize_filename::sanitize(filename)
         )
     }
 
-    fn get_compiled_filepath<S: AsRef<str>>(file_path: S) -> Option<String>
-    where
-        Self: Sized,
-    {
+    fn get_compiled_filepath(&self, file_path: &str) -> Option<String> {
         match crystalsoft_utils::get_filename(file_path) {
             Some(file_name) => Some(format!("{}{}", PATH_COMPILED, file_name)),
             None => None,
         }
     }
 
-    fn generate_filepath<S: AsRef<str>>(&self, file_name: S) -> String
-    where
-        Self: Sized;
+    fn generate_filepath(&self, file_name: &str) -> String;
 
-    async fn download_and_save<S: AsRef<str>>(&self, uri: S) -> Option<String>
-    where
-        Self: Sized;
+    async fn download_and_save(&self, uri: &str) -> Option<String>;
 
-    async fn save_file<S: AsRef<str>>(&self, file_path: S, data: Vec<u8>) -> FileResult
-    where
-        Self: Sized;
+    async fn save_file(&self, file_path: &str, data: Vec<u8>) -> FileResult;
 }

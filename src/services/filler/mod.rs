@@ -54,9 +54,17 @@ pub async fn compile_documents(
                                         {
                                             let export_result =
                                                 if accept.as_str() == mime::APPLICATION_PDF {
-                                                    compiler::merge_documents(documents, true)
+                                                    compiler::merge_documents(
+                                                        data.file.clone(),
+                                                        documents,
+                                                        true,
+                                                    )
                                                 } else {
-                                                    compiler::zip_documents(documents, true)
+                                                    compiler::zip_documents(
+                                                        data.file.clone(),
+                                                        documents,
+                                                        true,
+                                                    )
                                                 };
 
                                             services::export_content(accept, export_result)

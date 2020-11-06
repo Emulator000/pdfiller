@@ -13,7 +13,7 @@ use bytes::Buf;
 use zip::write::FileOptions;
 
 use crate::data::FileType;
-use crate::file::{FileProvider, FileResult};
+use crate::file::FileResult;
 use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
@@ -59,8 +59,7 @@ pub async fn compile_document(
 ) -> HandlerCompilerResult {
     match form::fields_filler(map, document).await {
         Ok(mut form) => {
-            if let Some(compiled_filename) =
-                FileProvider::get_compiled_filepath(document.file.as_str())
+            if let Some(compiled_filename) = file_type.get_compiled_filepath(document.file.as_str())
             {
                 let mut buf = Vec::new();
                 match form.save_to(&mut buf) {
@@ -83,7 +82,7 @@ pub async fn compile_document(
                 LoadError::LopdfError(e) => match e {
                     Error::DictKey => {
                         if let Some(compiled_filename) =
-                            FileProvider::get_compiled_filepath(&document.file)
+                            file_type.get_compiled_filepath(&document.file)
                         {
                             match crystalsoft_utils::read_file_buf(&document.file) {
                                 Ok(buf) => {
@@ -98,22 +97,6 @@ pub async fn compile_document(
                                     ))
                                 }
                             }
-
-                        // match fs::create_dir_all(File::PATH_COMPILED) {
-                        //     Ok(_) => {
-                        //         let _ = std::fs::copy(&document.file, &compiled_filename);
-                        //
-                        //         HandlerCompilerResult::Success
-                        //     }
-                        //     Err(e) => {
-                        //         sentry::capture_error(&e);
-                        //
-                        //         HandlerCompilerResult::Error(format!(
-                        //             "Error {:#?} saving a PDF file, aborted.",
-                        //             e
-                        //         ))
-                        //     }
-                        // }
                         } else {
                             HandlerCompilerResult::Error(format!(
                                 "Error saving a PDF file, aborted.",
@@ -131,7 +114,11 @@ pub async fn compile_document(
     }
 }
 
-pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
+pub fn zip_documents(
+    file_type: FileType,
+    documents: Vec<Document>,
+    compiled: bool,
+) -> ExportCompilerResult {
     let buf = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
@@ -140,7 +127,7 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
         if let Some(ref file_name) = crystalsoft_utils::get_filename(&document.file) {
             match zip.start_file(file_name, FileOptions::default()) {
                 Ok(_) => match if compiled {
-                    FileProvider::get_compiled_filepath(&document.file)
+                    file_type.get_compiled_filepath(&document.file)
                 } else {
                     Some(document.file)
                 } {
@@ -182,11 +169,15 @@ pub fn zip_documents(documents: Vec<Document>, compiled: bool) -> ExportCompiler
     ExportCompilerResult::Success(bytes.bytes().to_vec())
 }
 
-pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCompilerResult {
+pub fn merge_documents(
+    file_type: FileType,
+    mut documents: Vec<Document>,
+    compiled: bool,
+) -> ExportCompilerResult {
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
         if let Some(ref file_name) = if compiled {
-            FileProvider::get_compiled_filepath(&document.file)
+            file_type.get_compiled_filepath(&document.file)
         } else {
             Some(document.file)
         } {
@@ -202,7 +193,7 @@ pub fn merge_documents(mut documents: Vec<Document>, compiled: bool) -> ExportCo
             ExportCompilerResult::Error(format!("Error getting the compiled PDF file."))
         }
     } else {
-        let documents_objects = processor::get_documents_containers(documents);
+        let documents_objects = processor::get_documents_containers(file_type, documents);
         if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
             ExportCompilerResult::Error("Cannot extract PDFs documents".into())
         } else {
@@ -237,7 +228,7 @@ async fn save_compiled_file(
     file_path: String,
     buf: Vec<u8>,
 ) -> HandlerCompilerResult {
-    match file_type.save_file(file_path, buf).await {
+    match file_type.save_file(file_path.as_str(), buf).await {
         FileResult::Saved => HandlerCompilerResult::Success,
         FileResult::Error(e) => {
             sentry::capture_error(&e);
