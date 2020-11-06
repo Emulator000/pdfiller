@@ -6,8 +6,6 @@ use crate::file::FileProvider;
 use crate::redis::models::document::Document;
 use crate::redis::wrapper::RedisWrapper;
 
-pub type FileType = Arc<Box<dyn FileProvider>>;
-
 pub enum DataResult {
     Ok,
     Error(RedisError),
@@ -15,7 +13,7 @@ pub enum DataResult {
 
 #[derive(Clone)]
 pub struct Data {
-    pub file: FileType,
+    pub file: Arc<Box<dyn FileProvider>>,
     redis: RedisWrapper,
 }
 

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::io::{Cursor, SeekFrom};
 use std::io::{Seek, Write};
 
+use async_std::sync::Arc;
+
 use serde_json::Value;
 
 use pdf_forms::LoadError;
@@ -12,8 +14,7 @@ use bytes::Buf;
 
 use zip::write::FileOptions;
 
-use crate::data::FileType;
-use crate::file::{self, FileResult};
+use crate::file::{self, FileProvider, FileResult};
 use crate::redis::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
@@ -32,8 +33,8 @@ pub enum ExportCompilerResult {
     Error(String),
 }
 
-pub async fn compile_documents(
-    file_type: FileType,
+pub async fn compile_documents<F: FileProvider + ?Sized>(
+    file_type: Arc<Box<F>>,
     map: &PDFillerMap,
     documents: &Vec<Document>,
 ) -> HandlerCompilerResult {
@@ -52,8 +53,8 @@ pub async fn compile_documents(
     HandlerCompilerResult::Success
 }
 
-pub async fn compile_document(
-    file_type: FileType,
+pub async fn compile_document<F: FileProvider + ?Sized>(
+    file_type: Arc<Box<F>>,
     map: &PDFillerMap,
     document: &Document,
 ) -> HandlerCompilerResult {
@@ -213,8 +214,8 @@ fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult {
     }
 }
 
-async fn save_compiled_file(
-    file_type: FileType,
+async fn save_compiled_file<F: FileProvider + ?Sized>(
+    file_type: Arc<Box<F>>,
     file_path: String,
     buf: Vec<u8>,
 ) -> HandlerCompilerResult {
