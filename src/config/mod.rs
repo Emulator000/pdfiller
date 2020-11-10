@@ -31,7 +31,7 @@ pub struct ServerConfig {
 #[derive(Clone, Deserialize)]
 pub struct MongoConfig {
     pub host: String,
-    pub port: Option<u32>,
+    pub port: Option<u16>,
     pub db_name: String,
     pub user: Option<String>,
     pub password: Option<String>,

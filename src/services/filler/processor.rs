@@ -5,7 +5,7 @@ use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 
 use crate::file;
 use crate::logger::Logger;
-use crate::redis::models::document::Document;
+use crate::mongo::models::document::Document;
 
 const PDF_VERSION: &'static str = "1.5";
 

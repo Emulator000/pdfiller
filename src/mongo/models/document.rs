@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 
 use simple_cache::CacheItem;
 
-use crate::redis::models::Model;
+use crate::mongo::models::Model;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Document {

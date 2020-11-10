@@ -6,7 +6,7 @@ mod config;
 mod data;
 mod file;
 mod logger;
-mod redis;
+mod mongo;
 mod services;
 mod utils;
 
@@ -22,8 +22,8 @@ use crate::config::Config;
 use crate::data::Data;
 use crate::file::local::Local;
 use crate::file::s3::S3;
-use crate::redis::wrapper::RedisWrapper;
-use crate::redis::Redis;
+use crate::mongo::wrapper::MongoWrapper;
+use crate::mongo::MongoDB;
 
 const API_VERSION: &'static str = "v1";
 
@@ -41,7 +41,7 @@ async fn main() -> std::io::Result<()> {
         } else {
             Box::new(S3::new(config.service.clone()))
         },
-        RedisWrapper::new(Redis::new(&config.mongo).await),
+        MongoWrapper::new(MongoDB::new(&config.mongo).await),
     );
 
     HttpServer::new(move || {

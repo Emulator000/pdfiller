@@ -7,7 +7,7 @@ use chrono::Utc;
 
 use crate::data::{Data, DataResult};
 use crate::file::FileResult;
-use crate::redis::models::document::Document;
+use crate::mongo::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
