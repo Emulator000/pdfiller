@@ -16,13 +16,7 @@ pub trait Model: CacheItem + Send + Sync + Unpin + Serialize + DeserializeOwned 
         format!("{}", Self::name())
     }
 
-    fn model_key<T: Model, S: AsRef<str>>(value: Option<S>) -> String {
-        if let Some(value) = value {
-            format!("{}_{}", T::prefix(), value.as_ref())
-        } else {
-            format!("{}_*", T::prefix())
-        }
-    }
-
     fn to_document(&self) -> MongoDocument;
+
+    fn from_document(document: MongoDocument) -> Self;
 }

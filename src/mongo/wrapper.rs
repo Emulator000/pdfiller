@@ -16,12 +16,17 @@ impl MongoWrapper {
     }
 
     /// Generic
-    pub async fn get_all<T: 'static + Model>(&self) -> Option<Vec<T>> {
-        self.mongo.get::<T, &str>(None).await
+    pub async fn get_all<T: 'static + Model, S: AsRef<str>>(&self, sort_by: S) -> Option<Vec<T>> {
+        self.mongo.get::<T, _>(None, sort_by).await
     }
 
-    pub async fn get_all_by<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Vec<T>> {
-        self.mongo.get::<T, _>(Some(value)).await
+    pub async fn get_all_by<T: 'static + Model, S: AsRef<str>>(
+        &self,
+        key: S,
+        value: S,
+        sort_by: S,
+    ) -> Option<Vec<T>> {
+        self.mongo.get::<T, _>(Some((key, value)), sort_by).await
     }
 
     #[allow(dead_code)]

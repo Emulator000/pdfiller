@@ -21,18 +21,23 @@ impl Model for Document {
     }
 
     fn key(&self) -> String {
-        format!(
-            "{}_{}",
-            Self::model_key::<Self, _>(Some(&self.token)),
-            &self.file
-        )
+        format!("{}_{}", self.token, self.file)
     }
 
     fn to_document(&self) -> MongoDocument {
         doc! {
+            "key": self.key(),
             "token": self.token.clone(),
             "file": self.file.clone(),
             "date": self.date.clone(),
         }
+    }
+
+    fn from_document(document: MongoDocument) -> Self {
+        bson::from_bson::<Document>(bson::Bson::Document(document)).unwrap_or(Self {
+            token: "".into(),
+            file: "".into(),
+            date: Utc::now(),
+        })
     }
 }

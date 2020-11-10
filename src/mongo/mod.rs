@@ -3,10 +3,12 @@ pub mod wrapper;
 
 use std::sync::Arc;
 
-use async_std::sync::{RwLock, RwLockWriteGuard};
+use async_std::sync::RwLock;
+
+use futures_lite::StreamExt;
 
 use mongodb::error::Error;
-use mongodb::options::{ClientOptions, StreamAddress};
+use mongodb::options::{ClientOptions, FindOptions, StreamAddress};
 use mongodb::{Client, Collection, Database};
 
 use simple_cache::Cache;
@@ -43,151 +45,186 @@ impl MongoDB {
         self.database.write().await.collection(name.as_ref())
     }
 
-    pub async fn insert<T: Model>(&self, model: T) -> Result<(), Error> {
+    pub async fn insert<T: 'static + Model>(&self, model: T) -> Result<(), Error> {
+        let key = model.key();
         self.get_collection(T::name())
             .await
             .insert_one(model.to_document(), None)
-            .await?;
+            .await
+            .map_err(|e| {
+                sentry::capture_error(&e);
+
+                Logger::log(format!(
+                    "Error getting {} with key {}: {:#?}",
+                    T::name(),
+                    &key,
+                    e
+                ));
+
+                e
+            })?;
+
+        self.cache.insert::<T>(key.clone(), Some(model)).await;
 
         Ok(())
     }
 
     pub async fn update_one<T: 'static + Model>(&self, model: T) -> Result<(), Error> {
-        unimplemented!();
-        // let key = model.key();
-        // let result = redis::cmd("SET")
-        //     .arg(&[
-        //         &key,
-        //         &serde_json::to_string(&model).unwrap_or(String::new()),
-        //     ])
-        //     .query_async(&mut *self.database().await)
-        //     .await;
-        //
-        // if result.is_ok() {
-        //     self.cache.insert::<T>(key, Some(model)).await;
-        // }
-        //
-        // result
+        let key = model.key();
+        self.get_collection(T::name())
+            .await
+            .update_one(
+                doc! {
+                    "key": key.clone(),
+                },
+                model.to_document(),
+                None,
+            )
+            .await
+            .map_err(|e| {
+                sentry::capture_error(&e);
+
+                Logger::log(format!(
+                    "Error getting {} with key {}: {:#?}",
+                    T::name(),
+                    &key,
+                    e
+                ));
+
+                e
+            })?;
+
+        self.cache.insert::<T>(key.clone(), Some(model)).await;
+
+        Ok(())
     }
 
-    // ToDo: find a way to introduce a cache here!
-    pub async fn get<T: Model, S: AsRef<str>>(&self, value: Option<S>) -> Option<Vec<T>> {
-        unimplemented!();
-        // let key = if let Some(value) = value {
-        //     format!("{}_*", T::model_key::<T, S>(Some(value)))
-        // } else {
-        //     T::model_key::<T, S>(None)
-        // };
-        //
-        // let connection = &mut *self.database().await;
-        // match redis::cmd("KEYS")
-        //     .arg(&key)
-        //     .query_async::<_, Vec<String>>(connection)
-        //     .await
-        // {
-        //     Ok(res) => {
-        //         let mut results = Vec::new();
-        //         for key in res {
-        //             match redis::cmd("GET")
-        //                 .arg(&key)
-        //                 .query_async::<_, String>(connection)
-        //                 .await
-        //             {
-        //                 Ok(res) => match serde_json::from_str::<T>(&res) {
-        //                     Ok(res) => {
-        //                         results.push(res);
-        //                     }
-        //                     _ => {}
-        //                 },
-        //                 Err(e) => {
-        //                     sentry::capture_error(&e);
-        //
-        //                     Logger::log(format!(
-        //                         "Error getting {} with key {}: {:#?}",
-        //                         T::name(),
-        //                         &key,
-        //                         e
-        //                     ));
-        //                 }
-        //             }
-        //         }
-        //
-        //         Some(results)
-        //     }
-        //     Err(e) => {
-        //         sentry::capture_error(&e);
-        //
-        //         Logger::log(format!(
-        //             "Error getting keys with pattern {}: {:#?}",
-        //             &key, e
-        //         ));
-        //
-        //         None
-        //     }
-        // }
+    pub async fn get<T: Model, S: AsRef<str>>(
+        &self,
+        key_value: Option<(S, S)>,
+        sort_by: S,
+    ) -> Option<Vec<T>> {
+        let filter = if let Some(ref key_value) = key_value {
+            Some(doc! {
+                key_value.0.as_ref(): key_value.1.as_ref(),
+            })
+        } else {
+            None
+        };
+
+        match self
+            .get_collection(T::name())
+            .await
+            .find(
+                filter,
+                FindOptions::builder()
+                    .sort(doc! { sort_by.as_ref(): 1 })
+                    .build(),
+            )
+            .await
+        {
+            Ok(mut cursor) => {
+                let mut results = Vec::new();
+                while let Some(document) = cursor.next().await {
+                    match document {
+                        Ok(document) => {
+                            results.push(T::from_document(document));
+                        }
+                        Err(_) => {}
+                    }
+                }
+
+                Some(results)
+            }
+            Err(e) => {
+                sentry::capture_error(&e);
+
+                Logger::log(format!(
+                    "Error getting keys with pattern {:#?}: {:#?}",
+                    if let Some(key_value) = key_value {
+                        format!("{}, {}", key_value.0.as_ref(), key_value.1.as_ref())
+                    } else {
+                        "[empty]".into()
+                    },
+                    e
+                ));
+
+                None
+            }
+        }
     }
 
     #[allow(dead_code)]
-    pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
-        unimplemented!();
-        // let key = T::model_key::<T, S>(Some(value));
-        // if let Some(value) = self.cache.get::<T, _>(&key).await {
-        //     value
-        // } else {
-        //     match redis::cmd("GET")
-        //         .arg(&key)
-        //         .query_async::<_, String>(&mut *self.database().await)
-        //         .await
-        //     {
-        //         Ok(res) => match serde_json::from_str::<T>(&res) {
-        //             Ok(res) => {
-        //                 self.cache.insert::<T>(key.clone(), Some(res)).await;
-        //             }
-        //             _ => {}
-        //         },
-        //         Err(e) => {
-        //             sentry::capture_error(&e);
-        //
-        //             Logger::log(format!(
-        //                 "Error getting {} with key {}: {:#?}",
-        //                 T::name(),
-        //                 &key,
-        //                 e
-        //             ));
-        //
-        //             self.cache.insert::<T>(key.clone(), None).await;
-        //         }
-        //     };
-        //
-        //     self.cache.get::<T, _>(&key).await.unwrap()
-        // }
+    pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, key: S) -> Option<Arc<T>> {
+        if let Some(value) = self.cache.get::<T, _>(key.as_ref()).await {
+            value
+        } else {
+            match self
+                .get_collection(T::name())
+                .await
+                .find_one(
+                    doc! {
+                        "key": key.as_ref().to_owned(),
+                    },
+                    None,
+                )
+                .await
+            {
+                Ok(result) => match result {
+                    Some(document) => {
+                        self.cache
+                            .insert::<T>(key.as_ref().to_owned(), Some(T::from_document(document)))
+                            .await;
+                    }
+                    None => {
+                        self.cache.insert::<T>(key.as_ref().to_owned(), None).await;
+                    }
+                },
+                Err(e) => {
+                    sentry::capture_error(&e);
+
+                    Logger::log(format!(
+                        "Error getting {} with key {}: {:#?}",
+                        T::name(),
+                        key.as_ref(),
+                        e
+                    ));
+
+                    self.cache.insert::<T>(key.as_ref().to_owned(), None).await;
+                }
+            }
+
+            self.cache.get::<T, _>(key.as_ref()).await.unwrap()
+        }
     }
 
     #[allow(dead_code)]
     pub async fn delete_one<T: Model>(&self, model: T) -> Result<(), Error> {
-        unimplemented!();
-        // let key = model.key();
-        // let result = redis::cmd("DEL")
-        //     .arg(&key)
-        //     .query_async(&mut *self.database().await)
-        //     .await;
-        //
-        // match &result {
-        //     Ok(_) => {
-        //         self.cache.remove(&key).await;
-        //     }
-        //     Err(e) => {
-        //         sentry::capture_error(e);
-        //
-        //         Logger::log(format!(
-        //             "Error deleting {} with key {}: {:#?}",
-        //             T::name(),
-        //             &key,
-        //             e
-        //         ));
-        //     }
-        // };
-        //
-        // result
+        let key = model.key();
+        self.get_collection(T::name())
+            .await
+            .delete_one(
+                doc! {
+                    "key": key.clone(),
+                },
+                None,
+            )
+            .await
+            .map_err(|e| {
+                sentry::capture_error(&e);
+
+                Logger::log(format!(
+                    "Error getting {} with key {}: {:#?}",
+                    T::name(),
+                    &key,
+                    e
+                ));
+
+                e
+            })?;
+
+        self.cache.remove(&key).await;
+
+        Ok(())
     }
 }

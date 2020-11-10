@@ -26,17 +26,13 @@ impl Data {
     }
 
     pub async fn get_all_documents(&self) -> Option<Vec<Document>> {
-        self.mongo
-            .get_all::<Document>()
-            .await
-            .map(|documents| Self::sort_documents(documents))
+        self.mongo.get_all::<Document, _>("date").await
     }
 
     pub async fn get_documents_by_token<S: AsRef<str>>(&self, value: S) -> Option<Vec<Document>> {
         self.mongo
-            .get_all_by::<Document, _>(value)
+            .get_all_by::<Document, _>("token", value.as_ref(), "date")
             .await
-            .map(|documents| Self::sort_documents(documents))
     }
 
     pub async fn create_document(&self, document: Document) -> DataResult {
@@ -44,11 +40,5 @@ impl Data {
             Ok(_) => DataResult::Ok,
             Err(e) => DataResult::Error(e),
         }
-    }
-
-    fn sort_documents(mut documents: Vec<Document>) -> Vec<Document> {
-        documents.sort_by(|a, b| a.date.partial_cmp(&b.date).unwrap());
-
-        documents
     }
 }
