@@ -7,7 +7,7 @@ use async_std::sync::{RwLock, RwLockWriteGuard};
 
 use mongodb::error::Error;
 use mongodb::options::{ClientOptions, StreamAddress};
-use mongodb::{Client, Database};
+use mongodb::{Client, Collection, Database};
 
 use simple_cache::Cache;
 
@@ -39,15 +39,17 @@ impl MongoDB {
         }
     }
 
+    async fn get_collection<S: AsRef<str>>(&self, name: S) -> Collection {
+        self.database.write().await.collection(name.as_ref())
+    }
+
     pub async fn insert<T: Model>(&self, model: T) -> Result<(), Error> {
-        unimplemented!();
-        // redis::cmd("SET")
-        //     .arg(&[
-        //         model.key(),
-        //         serde_json::to_string(&model).unwrap_or(String::new()),
-        //     ])
-        //     .query_async(&mut *self.database().await)
-        //     .await
+        self.get_collection(T::name())
+            .await
+            .insert_one(model.to_document(), None)
+            .await?;
+
+        Ok(())
     }
 
     pub async fn update_one<T: 'static + Model>(&self, model: T) -> Result<(), Error> {

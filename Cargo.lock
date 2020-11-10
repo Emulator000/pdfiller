@@ -2343,6 +2343,7 @@ dependencies = [
  "arc-swap",
  "async-std",
  "async-trait",
+ "bson",
  "bytes",
  "chrono",
  "crystalsoft-utils",

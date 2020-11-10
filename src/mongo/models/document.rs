@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 
 use simple_cache::CacheItem;
 
+use mongodb::bson::Document as MongoDocument;
+
 use crate::mongo::models::Model;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -24,5 +26,13 @@ impl Model for Document {
             Self::model_key::<Self, _>(Some(&self.token)),
             &self.file
         )
+    }
+
+    fn to_document(&self) -> MongoDocument {
+        doc! {
+            "token": self.token.clone(),
+            "file": self.file.clone(),
+            "date": self.date.clone(),
+        }
     }
 }

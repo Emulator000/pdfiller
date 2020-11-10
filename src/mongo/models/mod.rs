@@ -1,6 +1,8 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use mongodb::bson::Document as MongoDocument;
+
 use simple_cache::CacheItem;
 
 pub mod document;
@@ -21,4 +23,6 @@ pub trait Model: CacheItem + Send + Sync + Unpin + Serialize + DeserializeOwned 
             format!("{}_*", T::prefix())
         }
     }
+
+    fn to_document(&self) -> MongoDocument;
 }
