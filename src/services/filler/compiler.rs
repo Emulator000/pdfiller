@@ -15,7 +15,7 @@ use bytes::Buf;
 use zip::write::FileOptions;
 
 use crate::file::{self, FileError, FileProvider, FileResult};
-use crate::redis::models::document::Document;
+use crate::mongo::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
 use crate::services::filler::processor;
@@ -206,7 +206,7 @@ pub async fn merge_documents<F: FileProvider + ?Sized>(
             ExportCompilerResult::Error(format!("Error getting the compiled PDF file."))
         }
     } else {
-        let documents_objects = processor::get_documents_containers(documents);
+        let documents_objects = processor::get_documents_containers(documents, compiled);
         if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
             ExportCompilerResult::Error("Cannot extract PDFs documents".into())
         } else {

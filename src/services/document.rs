@@ -3,11 +3,9 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
 
-use chrono::Utc;
-
 use crate::data::{Data, DataResult};
 use crate::file::FileResult;
-use crate::redis::models::document::Document;
+use crate::mongo::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -128,12 +126,7 @@ pub async fn post_document(
                 })
             } else {
                 if let Some(file) = filepath {
-                    let document = Document {
-                        token: token.0,
-                        file,
-                        date: Utc::now(),
-                    };
-
+                    let document = Document::new(token.0, file);
                     match data.create_document(document.clone()).await {
                         DataResult::Ok => HttpResponse::Created().json(document),
                         DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
@@ -196,9 +189,7 @@ pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
     if let Some(documents) = data.get_all_documents().await {
         HttpResponse::Ok().json(documents)
     } else {
-        HttpResponse::NoContent().json(WsError {
-            error: "No documents found!".into(),
-        })
+        HttpResponse::NoContent().finish()
     }
 }
 
@@ -210,9 +201,7 @@ pub async fn get_documents_by_token(
     if let Some(documents) = data.get_documents_by_token(&token.0).await {
         HttpResponse::Ok().json(documents)
     } else {
-        HttpResponse::NoContent().json(WsError {
-            error: "No documents found!".into(),
-        })
+        HttpResponse::NoContent().finish()
     }
 }
 

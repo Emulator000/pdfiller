@@ -5,7 +5,7 @@ use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 
 use crate::file;
 use crate::logger::Logger;
-use crate::redis::models::document::Document;
+use crate::mongo::models::document::Document;
 
 const PDF_VERSION: &'static str = "1.5";
 
@@ -14,14 +14,18 @@ pub struct DocumentObjects {
     pub pages: BTreeMap<ObjectId, Object>,
 }
 
-pub fn get_documents_containers(documents: Vec<Document>) -> DocumentObjects {
+pub fn get_documents_containers(documents: Vec<Document>, compiled: bool) -> DocumentObjects {
     let mut max_id = 1;
 
     let mut documents_pages = BTreeMap::new();
     let mut documents_objects = BTreeMap::new();
 
     for document in documents {
-        if let Some(ref file_name) = file::get_compiled_filepath(&document.file) {
+        if let Some(ref file_name) = if compiled {
+            file::get_compiled_filepath(&document.file)
+        } else {
+            Some(document.file)
+        } {
             match PdfDocument::load(file_name) {
                 Ok(mut document) => {
                     document.renumber_objects_with(max_id);

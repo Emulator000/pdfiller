@@ -1,2 +1,2 @@
-FROM redis:latest
+FROM mongo:latest
 LABEL maintainer='emulator@hotmail.it'

@@ -10,7 +10,7 @@ use lopdf::xobject;
 use regex::Regex;
 
 use crate::client;
-use crate::redis::models::document::Document;
+use crate::mongo::models::document::Document;
 use crate::utils;
 
 pub type PDFillerMap = HashMap<String, Value>;

@@ -1,12 +1,14 @@
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate bson;
 
 mod client;
 mod config;
 mod data;
 mod file;
 mod logger;
-mod redis;
+mod mongo;
 mod services;
 mod utils;
 
@@ -22,8 +24,8 @@ use crate::config::Config;
 use crate::data::Data;
 use crate::file::local::Local;
 use crate::file::s3::S3;
-use crate::redis::wrapper::RedisWrapper;
-use crate::redis::Redis;
+use crate::mongo::wrapper::MongoWrapper;
+use crate::mongo::MongoDB;
 
 const API_VERSION: &'static str = "v1";
 
@@ -31,7 +33,9 @@ const API_VERSION: &'static str = "v1";
 async fn main() -> std::io::Result<()> {
     let config = Config::new("config/config.toml");
 
-    let _guard = sentry::init(config.sentry.dsn);
+    if let Some(sentry) = config.sentry {
+        let _guard = sentry::init(sentry.dsn);
+    }
 
     let data = Data::new(
         if config.service.filesystem == "local" {
@@ -39,7 +43,7 @@ async fn main() -> std::io::Result<()> {
         } else {
             Box::new(S3::new(config.service.clone()))
         },
-        RedisWrapper::new(Redis::new(&config.redis).await),
+        MongoWrapper::new(MongoDB::new(&config.mongo).await),
     );
 
     HttpServer::new(move || {

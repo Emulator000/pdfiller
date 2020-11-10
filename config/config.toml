@@ -10,9 +10,12 @@
     bind_address = "${PF_WS_HOST}"
     bind_port = ${PF_WS_PORT}
 
-[redis]
-    host = "${PF_REDIS_HOST}"
-    port = ${PF_REDIS_PORT}
+[mongo]
+    host = "${PF_MONGO_HOST}"
+    port = ${PF_MONGO_PORT}
+    db_name = "${PF_MONGO_DB_NAME}"
+#    user = "${PF_MONGO_USER}"
+#    password = "${PF_MONGO_PASSWORD}"
 
-[sentry]
-    dsn = "${PF_SENTRY_DSN}"
+#[sentry]
+#    dsn = "${PF_SENTRY_DSN}"
