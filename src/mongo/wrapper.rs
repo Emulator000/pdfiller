@@ -1,5 +1,3 @@
-use async_std::sync::Arc;
-
 use mongodb::error::Error;
 
 use crate::mongo::models::Model;
@@ -29,22 +27,7 @@ impl MongoWrapper {
         self.mongo.get::<T, _>(Some((key, value)), sort_by).await
     }
 
-    #[allow(dead_code)]
-    pub async fn get<T: 'static + Model, S: AsRef<str>>(&self, value: S) -> Option<Arc<T>> {
-        self.mongo.get_one::<T, _>(value).await
-    }
-
     pub async fn create<T: 'static + Model>(&self, model: T) -> Result<(), Error> {
         self.mongo.insert::<T>(model).await
-    }
-
-    #[allow(dead_code)]
-    pub async fn update<T: 'static + Model, S: AsRef<str>>(&self, model: T) -> Result<(), Error> {
-        self.mongo.update_one::<T>(model).await
-    }
-
-    #[allow(dead_code)]
-    pub async fn delete<T: Model, S: AsRef<str>>(&self, model: T) -> Result<(), Error> {
-        self.mongo.delete_one::<T>(model).await
     }
 }

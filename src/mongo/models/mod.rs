@@ -10,11 +10,11 @@ pub mod document;
 pub trait Model: CacheItem + Send + Sync + Unpin + Serialize + DeserializeOwned {
     fn name() -> &'static str;
 
-    fn key(&self) -> String;
-
     fn prefix() -> String {
         format!("{}", Self::name())
     }
+
+    fn debug(&self) -> String;
 
     fn to_document(&self) -> MongoDocument;
 

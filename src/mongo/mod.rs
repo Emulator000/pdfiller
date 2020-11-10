@@ -11,6 +11,8 @@ use mongodb::error::Error;
 use mongodb::options::{ClientOptions, FindOptions};
 use mongodb::{Client, Collection, Database};
 
+use bson::oid::ObjectId;
+
 use simple_cache::Cache;
 
 use crate::config::MongoConfig;
@@ -20,7 +22,7 @@ use crate::mongo::models::Model;
 #[derive(Clone)]
 pub struct MongoDB {
     database: Arc<RwLock<Database>>,
-    cache: Cache<String>,
+    cache: Cache<ObjectId>,
 }
 
 impl MongoDB {
@@ -65,55 +67,77 @@ impl MongoDB {
     }
 
     pub async fn insert<T: 'static + Model>(&self, model: T) -> Result<(), Error> {
-        let key = model.key();
-        self.get_collection(T::name())
+        match self
+            .get_collection(T::name())
             .await
             .insert_one(model.to_document(), None)
             .await
             .map_err(|e| {
-                sentry::capture_error(&e);
-
                 Logger::log(format!(
-                    "Error getting {} with key {}: {:#?}",
+                    "Error getting {} with model {}: {:#?}",
                     T::name(),
-                    &key,
+                    model.debug(),
                     e
                 ));
 
+                sentry::capture_error(&e);
+
                 e
-            })?;
+            }) {
+            Ok(result) => {
+                if let Some(object_id) = result.inserted_id.as_object_id() {
+                    self.cache
+                        .insert::<T>(object_id.to_owned(), Some(model))
+                        .await;
+                }
 
-        self.cache.insert::<T>(key.clone(), Some(model)).await;
+                Ok(())
+            }
+            Err(e) => {
+                Logger::log(format!(
+                    "Error getting {} with model {}: {:#?}",
+                    T::name(),
+                    model.debug(),
+                    e
+                ));
 
-        Ok(())
+                sentry::capture_error(&e);
+
+                Err(e)
+            }
+        }
     }
 
-    pub async fn update_one<T: 'static + Model>(&self, model: T) -> Result<(), Error> {
-        let key = model.key();
+    #[allow(dead_code)]
+    pub async fn update_one<T: 'static + Model>(
+        &self,
+        id: ObjectId,
+        model: T,
+    ) -> Result<(), Error> {
         self.get_collection(T::name())
             .await
             .update_one(
                 doc! {
-                    "key": key.clone(),
+                    "_id": id.clone(),
                 },
                 model.to_document(),
                 None,
             )
             .await
             .map_err(|e| {
-                sentry::capture_error(&e);
-
                 Logger::log(format!(
                     "Error getting {} with key {}: {:#?}",
                     T::name(),
-                    &key,
+                    &id,
                     e
                 ));
+
+                sentry::capture_error(&e);
 
                 e
             })?;
 
-        self.cache.insert::<T>(key.clone(), Some(model)).await;
+        self.cache.insert::<T>(id, Some(model)).await;
 
         Ok(())
     }
@@ -156,11 +180,9 @@ impl MongoDB {
                 Some(results)
             }
             Err(e) => {
-                sentry::capture_error(&e);
-
                 Logger::log(format!(
                     "Error getting keys with pattern {:#?}: {:#?}",
-                    if let Some(key_value) = key_value {
+                    if let Some(ref key_value) = key_value {
                         format!("{}, {}", key_value.0.as_ref(), key_value.1.as_ref())
                     } else {
                         "[empty]".into()
@@ -168,14 +190,16 @@ impl MongoDB {
                     e
                 ));
 
+                sentry::capture_error(&e);
+
                 None
             }
         }
     }
 
     #[allow(dead_code)]
-    pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, key: S) -> Option<Arc<T>> {
-        if let Some(value) = self.cache.get::<T, _>(key.as_ref()).await {
+    pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, id: ObjectId) -> Option<Arc<T>> {
+        if let Some(value) = self.cache.get::<T, _>(&id).await {
             value
         } else {
             match self
@@ -183,7 +207,7 @@ impl MongoDB {
                 .await
                 .find_one(
                     doc! {
-                        "key": key.as_ref().to_owned(),
+                        "_id": id.clone(),
                     },
                     None,
                 )
@@ -192,57 +216,56 @@ impl MongoDB {
                 Ok(result) => match result {
                     Some(document) => {
                         self.cache
-                            .insert::<T>(key.as_ref().to_owned(), Some(T::from_document(document)))
+                            .insert::<T>(id.clone(), Some(T::from_document(document)))
                             .await;
                     }
                     None => {
-                        self.cache.insert::<T>(key.as_ref().to_owned(), None).await;
+                        self.cache.insert::<T>(id.clone(), None).await;
                     }
                 },
                 Err(e) => {
-                    sentry::capture_error(&e);
-
                     Logger::log(format!(
                         "Error getting {} with key {}: {:#?}",
                         T::name(),
-                        key.as_ref(),
+                        &id,
                         e
                     ));
 
-                    self.cache.insert::<T>(key.as_ref().to_owned(), None).await;
+                    sentry::capture_error(&e);
+
+                    self.cache.insert::<T>(id.clone(), None).await;
                 }
             }
 
-            self.cache.get::<T, _>(key.as_ref()).await.unwrap()
+            self.cache.get::<T, _>(&id).await.unwrap()
         }
     }
 
     #[allow(dead_code)]
-    pub async fn delete_one<T: Model>(&self, model: T) -> Result<(), Error> {
-        let key = model.key();
+    pub async fn delete_one<T: Model>(&self, id: ObjectId) -> Result<(), Error> {
         self.get_collection(T::name())
             .await
             .delete_one(
                 doc! {
-                    "key": key.clone(),
+                    "_id": id.clone(),
                 },
                 None,
             )
             .await
             .map_err(|e| {
-                sentry::capture_error(&e);
-
                 Logger::log(format!(
                     "Error getting {} with key {}: {:#?}",
                     T::name(),
-                    &key,
+                    &id,
                     e
                 ));
+
+                sentry::capture_error(&e);
 
                 e
             })?;
 
-        self.cache.remove(&key).await;
+        self.cache.remove(&id).await;
 
         Ok(())
     }

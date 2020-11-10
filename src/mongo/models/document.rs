@@ -6,7 +6,7 @@ use mongodb::bson::Document as MongoDocument;
 
 use crate::mongo::models::Model;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     id: Option<bson::oid::ObjectId>,
@@ -42,13 +42,12 @@ impl Model for Document {
         "document"
     }
 
-    fn key(&self) -> String {
-        format!("{}_{}", self.token, self.file)
+    fn debug(&self) -> String {
+        format!("{:#?}", self)
     }
 
     fn to_document(&self) -> MongoDocument {
         doc! {
-            "key": self.key(),
             "token": self.token.clone(),
             "file": self.file.clone(),
             "date": self.date.clone(),
