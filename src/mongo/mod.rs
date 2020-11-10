@@ -8,7 +8,7 @@ use async_std::sync::RwLock;
 use futures_lite::StreamExt;
 
 use mongodb::error::Error;
-use mongodb::options::{ClientOptions, FindOptions, StreamAddress};
+use mongodb::options::{ClientOptions, FindOptions};
 use mongodb::{Client, Collection, Database};
 
 use simple_cache::Cache;
@@ -24,13 +24,32 @@ pub struct MongoDB {
 }
 
 impl MongoDB {
+    const MONGDB_STR: &'static str = "mongodb";
+    const DEFAULT_PORT: u16 = 27017;
+
     pub async fn new(config: &MongoConfig) -> Self {
-        let options = ClientOptions::builder()
-            .hosts(vec![StreamAddress {
-                hostname: config.host.clone(),
-                port: config.port,
-            }])
-            .build();
+        let connection_str = format!(
+            "{}:{}",
+            config.host,
+            config.port.unwrap_or(Self::DEFAULT_PORT)
+        );
+
+        let options = ClientOptions::parse(
+            if let Some(ref user) = config.user {
+                format!(
+                    "{}://{}:{}@{}",
+                    Self::MONGDB_STR,
+                    user,
+                    config.password.as_deref().unwrap_or(""),
+                    connection_str
+                )
+            } else {
+                format!("{}://{}", Self::MONGDB_STR, connection_str)
+            }
+            .as_str(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Error {:#?} creating connection to {}", e, config.host));
 
         let client = Client::with_options(options)
             .unwrap_or_else(|e| panic!("Error {:#?} connecting to {}", e, config.host));

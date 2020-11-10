@@ -3,8 +3,6 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 
 use futures_lite::stream::StreamExt;
 
-use chrono::Utc;
-
 use crate::data::{Data, DataResult};
 use crate::file::FileResult;
 use crate::mongo::models::document::Document;
@@ -128,12 +126,7 @@ pub async fn post_document(
                 })
             } else {
                 if let Some(file) = filepath {
-                    let document = Document {
-                        token: token.0,
-                        file,
-                        date: Utc::now(),
-                    };
-
+                    let document = Document::new(token.0, file);
                     match data.create_document(document.clone()).await {
                         DataResult::Ok => HttpResponse::Created().json(document),
                         DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {

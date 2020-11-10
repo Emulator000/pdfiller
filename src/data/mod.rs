@@ -26,13 +26,31 @@ impl Data {
     }
 
     pub async fn get_all_documents(&self) -> Option<Vec<Document>> {
-        self.mongo.get_all::<Document, _>("date").await
+        if let Some(documents) = self.mongo.get_all::<Document, _>("date").await {
+            if !documents.is_empty() {
+                Some(documents)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub async fn get_documents_by_token<S: AsRef<str>>(&self, value: S) -> Option<Vec<Document>> {
-        self.mongo
+        if let Some(documents) = self
+            .mongo
             .get_all_by::<Document, _>("token", value.as_ref(), "date")
             .await
+        {
+            if !documents.is_empty() {
+                Some(documents)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub async fn create_document(&self, document: Document) -> DataResult {
