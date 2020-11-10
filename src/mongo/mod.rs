@@ -171,7 +171,7 @@ impl MongoDB {
                 while let Some(document) = cursor.next().await {
                     match document {
                         Ok(document) => {
-                            results.push(T::from_document(document));
+                            results.push(T::from_document(document).unwrap_or(T::default()));
                         }
                         Err(_) => {}
                     }
@@ -216,7 +216,10 @@ impl MongoDB {
                 Ok(result) => match result {
                     Some(document) => {
                         self.cache
-                            .insert::<T>(id.clone(), Some(T::from_document(document)))
+                            .insert::<T>(
+                                id.clone(),
+                                Some(T::from_document(document).unwrap_or(T::default())),
+                            )
                             .await;
                     }
                     None => {

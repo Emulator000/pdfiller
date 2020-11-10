@@ -189,9 +189,7 @@ pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
     if let Some(documents) = data.get_all_documents().await {
         HttpResponse::Ok().json(documents)
     } else {
-        HttpResponse::NoContent().json(WsError {
-            error: "No documents found!".into(),
-        })
+        HttpResponse::NoContent().finish()
     }
 }
 
@@ -203,9 +201,7 @@ pub async fn get_documents_by_token(
     if let Some(documents) = data.get_documents_by_token(&token.0).await {
         HttpResponse::Ok().json(documents)
     } else {
-        HttpResponse::NoContent().json(WsError {
-            error: "No documents found!".into(),
-        })
+        HttpResponse::NoContent().finish()
     }
 }
 
