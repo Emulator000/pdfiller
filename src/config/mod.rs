@@ -8,8 +8,8 @@ use toml;
 pub struct Config {
     pub service: ServiceConfig,
     pub server: ServerConfig,
-    pub redis: RedisConfig,
-    pub sentry: SentryConfig,
+    pub mongo: MongoConfig,
+    pub sentry: Option<SentryConfig>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -29,9 +29,12 @@ pub struct ServerConfig {
 }
 
 #[derive(Clone, Deserialize)]
-pub struct RedisConfig {
+pub struct MongoConfig {
     pub host: String,
     pub port: Option<u32>,
+    pub db_name: String,
+    pub user: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]

@@ -31,7 +31,9 @@ const API_VERSION: &'static str = "v1";
 async fn main() -> std::io::Result<()> {
     let config = Config::new("config/config.toml");
 
-    let _guard = sentry::init(config.sentry.dsn);
+    if let Some(sentry) = config.sentry {
+        let _guard = sentry::init(sentry.dsn);
+    }
 
     let data = Data::new(
         if config.service.filesystem == "local" {
@@ -39,7 +41,7 @@ async fn main() -> std::io::Result<()> {
         } else {
             Box::new(S3::new(config.service.clone()))
         },
-        RedisWrapper::new(Redis::new(&config.redis).await),
+        RedisWrapper::new(Redis::new(&config.mongo).await),
     );
 
     HttpServer::new(move || {

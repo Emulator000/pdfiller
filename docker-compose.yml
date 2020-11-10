@@ -21,21 +21,18 @@ services:
     expose:
       - $PF_WS_PORT
     depends_on:
-      - redis
+      - mongo
       - nginx
 
-  redis:
-    build: ./docker/images/redis
-    container_name: pf_redis
-    environment:
-      REDIS_APPENDONLY: "yes"
-      REDIS_APPENDFSYNC: "always"
+  mongo:
+    build: ./docker/images/mongo
+    container_name: pf_mongo
     expose:
-      - $PF_REDIS_PORT
+      - $PF_MONGO_PORT
     volumes:
-      - "./redis:/data"
+      - "./mongo:/mongo/data"
     ports:
-      - $PF_REDIS_PUBLIC_PORT:$PF_REDIS_PORT
+      - $PF_MONGO_PUBLIC_PORT:$PF_MONGO_PORT
 
   nginx:
     build: ./docker/images/web

@@ -9,7 +9,7 @@ use redis::RedisResult;
 
 use simple_cache::Cache;
 
-use crate::config::RedisConfig;
+use crate::config::MongoConfig;
 use crate::logger::Logger;
 use crate::redis::models::Model;
 
@@ -21,9 +21,9 @@ pub struct Redis {
 }
 
 impl Redis {
-    const DEFAULT_PORT: u32 = 6379;
+    const DEFAULT_PORT: u32 = 27017;
 
-    pub async fn new(redis_config: &RedisConfig) -> Self {
+    pub async fn new(redis_config: &MongoConfig) -> Self {
         let client = redis::Client::open(format!(
             "redis://{}:{}",
             redis_config.host,
