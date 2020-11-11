@@ -1,5 +1,5 @@
 # PDFiller
-PDF Form filler API with a built-in reverse proxy with Nginx
+PDF Form filler API with a built-in reverse proxy with Nginx, Amazon S3 integration for storage and MongoDB.
 
 ## Running the web service
 The application uses `docker-compose` in order to run all the needed services. You have to install last Docker CE with Docker compose in order to run it.
@@ -12,7 +12,7 @@ For the standard compile just run `cargo +stable build --release` but if you hav
 ## Commands
 Running:
 
-* `make start_local` starts the local instance (WARNING: you must have a Redis Server running locally)
+* `make start_local` starts the local instance (WARNING: you must have MongoDB running locally)
 * `make start` for default: starts the dev instance
 * `make start_prod` for the production instance
 

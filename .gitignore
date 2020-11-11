@@ -4,7 +4,7 @@
 /target/
 /logs/*
 !/logs/.gitkeep
-/redis
+/mongo
 /tmp
 **/*.rs.bk
 /*.data
