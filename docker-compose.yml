@@ -9,6 +9,7 @@ services:
       - "./target/debug/pdfiller:/home/pdfiller"
       - "./docker/scripts/pdfiller/start.sh:/home/pdfiller.sh"
       - "./logs:/home/logs"
+      - "./tmp:/home/tmp"
     ulimits:
       nproc: 1000000
       nofile:

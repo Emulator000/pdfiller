@@ -16,7 +16,6 @@ use bson::oid::ObjectId;
 use simple_cache::Cache;
 
 use crate::config::MongoConfig;
-use crate::logger::Logger;
 use crate::mongo::models::Model;
 
 #[derive(Clone)]
@@ -73,12 +72,12 @@ impl MongoDB {
             .insert_one(model.to_document(), None)
             .await
             .map_err(|e| {
-                Logger::log(format!(
+                info!(
                     "Error getting {} with model {}: {:#?}",
                     T::name(),
                     model.debug(),
                     e
-                ));
+                );
 
                 sentry::capture_error(&e);
 
@@ -94,12 +93,12 @@ impl MongoDB {
                 Ok(())
             }
             Err(e) => {
-                Logger::log(format!(
+                info!(
                     "Error getting {} with model {}: {:#?}",
                     T::name(),
                     model.debug(),
                     e
-                ));
+                );
 
                 sentry::capture_error(&e);
 
@@ -125,12 +124,7 @@ impl MongoDB {
             )
             .await
             .map_err(|e| {
-                Logger::log(format!(
-                    "Error getting {} with key {}: {:#?}",
-                    T::name(),
-                    &id,
-                    e
-                ));
+                info!("Error getting {} with key {}: {:#?}", T::name(), &id, e);
 
                 sentry::capture_error(&e);
 
@@ -180,7 +174,7 @@ impl MongoDB {
                 Some(results)
             }
             Err(e) => {
-                Logger::log(format!(
+                info!(
                     "Error getting keys with pattern {:#?}: {:#?}",
                     if let Some(ref key_value) = key_value {
                         format!("{}, {}", key_value.0.as_ref(), key_value.1.as_ref())
@@ -188,7 +182,7 @@ impl MongoDB {
                         "[empty]".into()
                     },
                     e
-                ));
+                );
 
                 sentry::capture_error(&e);
 
@@ -227,12 +221,7 @@ impl MongoDB {
                     }
                 },
                 Err(e) => {
-                    Logger::log(format!(
-                        "Error getting {} with key {}: {:#?}",
-                        T::name(),
-                        &id,
-                        e
-                    ));
+                    info!("Error getting {} with key {}: {:#?}", T::name(), &id, e);
 
                     sentry::capture_error(&e);
 
@@ -256,12 +245,7 @@ impl MongoDB {
             )
             .await
             .map_err(|e| {
-                Logger::log(format!(
-                    "Error getting {} with key {}: {:#?}",
-                    T::name(),
-                    &id,
-                    e
-                ));
+                info!("Error getting {} with key {}: {:#?}", T::name(), &id, e);
 
                 sentry::capture_error(&e);
 

@@ -34,6 +34,8 @@
     mime = "^0.3"
     chrono = "^0.4"
     rust-s3 = { version = "^0.26", features = ["rustls-tls"] }
+    log = "^0.4"
+    env_logger = "^0.8"
 
     # For static building
     openssl-sys = { version = "*", features = ["vendored"] }

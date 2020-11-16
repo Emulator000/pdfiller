@@ -2,15 +2,18 @@
 extern crate serde_derive;
 #[macro_use]
 extern crate bson;
+#[macro_use]
+extern crate log;
 
 mod client;
 mod config;
 mod data;
 mod file;
-mod logger;
 mod mongo;
 mod services;
 mod utils;
+
+use env_logger::Env;
 
 use actix_web::{
     middleware::{
@@ -31,6 +34,8 @@ const API_VERSION: &'static str = "v1";
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     let config = Config::new("config/config.toml");
 
     if let Some(sentry) = config.sentry {
@@ -44,6 +49,11 @@ async fn main() -> std::io::Result<()> {
             Box::new(S3::new(config.service.clone()))
         },
         MongoWrapper::new(MongoDB::new(&config.mongo).await),
+    );
+
+    info!(
+        "Starting PDFIller API server at http://{}:{}...",
+        config.server.bind_address, config.server.bind_port
     );
 
     HttpServer::new(move || {

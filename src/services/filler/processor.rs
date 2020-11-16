@@ -4,7 +4,6 @@ use std::str;
 use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 
 use crate::file;
-use crate::logger::Logger;
 use crate::mongo::models::document::Document;
 
 const PDF_VERSION: &'static str = "1.5";
@@ -49,7 +48,7 @@ pub fn get_documents_containers(documents: Vec<Document>, compiled: bool) -> Doc
                 Err(e) => {
                     sentry::capture_error(&e);
 
-                    Logger::log(format!("Error loading the PDF: {:#?}", e));
+                    info!("Error loading the PDF: {:#?}", e);
                 }
             }
         }
