@@ -22,7 +22,7 @@ impl Local {
 #[async_trait]
 impl FileProvider for Local {
     async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError> {
-        crystalsoft_utils::read_file_buf(file_path).map_err(|e| FileError::IoError(e))
+        crystalsoft_utils::read_file_buf(file_path).map_err(FileError::IoError)
     }
 
     async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {

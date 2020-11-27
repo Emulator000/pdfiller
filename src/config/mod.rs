@@ -2,8 +2,6 @@ use std::env;
 
 use serde::Deserialize;
 
-use toml;
-
 #[derive(Clone, Deserialize)]
 pub struct Config {
     pub service: ServiceConfig,

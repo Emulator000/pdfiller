@@ -6,7 +6,7 @@ use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 use crate::file;
 use crate::mongo::models::document::Document;
 
-const PDF_VERSION: &'static str = "1.5";
+const PDF_VERSION: &str = "1.5";
 
 pub struct DocumentObjects {
     pub objects: BTreeMap<ObjectId, Object>,
@@ -101,9 +101,7 @@ pub fn process_documents(documents_objects: DocumentObjects) -> Option<PdfDocume
         }
     }
 
-    if pages_object.is_none() {
-        return None;
-    }
+    pages_object.as_ref()?;
 
     for (object_id, object) in documents_objects.pages.iter() {
         if let Ok(dictionary) = object.as_dict() {
@@ -116,9 +114,7 @@ pub fn process_documents(documents_objects: DocumentObjects) -> Option<PdfDocume
         }
     }
 
-    if catalog_object.is_none() {
-        return None;
-    }
+    catalog_object.as_ref()?;
 
     let catalog_object = catalog_object.unwrap();
     let pages_object = pages_object.unwrap();

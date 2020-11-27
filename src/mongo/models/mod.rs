@@ -13,7 +13,7 @@ pub trait Model: CacheItem + Send + Sync + Unpin + Serialize + DeserializeOwned 
     fn name() -> &'static str;
 
     fn prefix() -> String {
-        format!("{}", Self::name())
+        Self::name().to_string()
     }
 
     fn default() -> Self;

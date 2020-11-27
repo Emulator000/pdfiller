@@ -13,7 +13,7 @@ use ::s3::S3Error;
 
 use crate::client;
 
-pub const PATH_COMPILED: &'static str = "compiled/";
+pub const PATH_COMPILED: &str = "compiled/";
 
 pub enum FileResult {
     Saved,
@@ -42,26 +42,23 @@ pub trait FileProvider: Send + Sync {
 
     async fn download_and_save(&self, uri: &str) -> Option<String> {
         let mut filepath = None;
-        match client::get(uri).await {
-            Some(pdf) => {
-                let remote_file_path = self.generate_filepath("file.pdf");
-                match self.save(remote_file_path.as_str(), pdf).await {
-                    FileResult::Saved => {
-                        filepath = Some(remote_file_path.clone());
-                    }
-                    FileResult::Error(e) => {
-                        sentry::capture_error(&e);
-                    }
-                    FileResult::S3Error(e) => {
-                        sentry::capture_error(&e);
-                    }
-                    FileResult::BlockingError(e) => {
-                        sentry::capture_error(&e);
-                    }
-                    _ => {}
+        if let Some(pdf) = client::get(uri).await {
+            let remote_file_path = self.generate_filepath("file.pdf");
+            match self.save(remote_file_path.as_str(), pdf).await {
+                FileResult::Saved => {
+                    filepath = Some(remote_file_path.clone());
                 }
+                FileResult::Error(e) => {
+                    sentry::capture_error(&e);
+                }
+                FileResult::S3Error(e) => {
+                    sentry::capture_error(&e);
+                }
+                FileResult::BlockingError(e) => {
+                    sentry::capture_error(&e);
+                }
+                _ => {}
             }
-            None => {}
         }
 
         filepath

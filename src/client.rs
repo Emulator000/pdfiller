@@ -4,8 +4,8 @@ use serde::Serialize;
 
 use reqwest::Client;
 
-const USER_AGENT_KEY: &'static str = "User-Agent";
-const UA: &'static str = "PDFiller";
+const USER_AGENT_KEY: &str = "User-Agent";
+const UA: &str = "PDFiller";
 
 pub async fn get<S: AsRef<str>>(uri: S) -> Option<Vec<u8>> {
     let client_request = Client::default().get(uri.as_ref());

@@ -35,8 +35,8 @@ pub async fn post_document(
                 filepath = data.file.download_and_save(form.file.as_str()).await;
             } else {
                 while let Ok(Some(mut field)) = payload.try_next().await {
-                    match field.content_disposition() {
-                        Some(ref content_type) => match content_type.get_name() {
+                    if let Some(ref content_type) = field.content_disposition() {
+                        match content_type.get_name() {
                             Some("file") => match content_type.get_filename() {
                                 Some(filename) => {
                                     if !filename.is_empty() {
@@ -114,8 +114,7 @@ pub async fn post_document(
                             },
                             Some(_) => {}
                             None => {}
-                        },
-                        None => {}
+                        }
                     }
                 }
             }
@@ -124,20 +123,18 @@ pub async fn post_document(
                 HttpResponse::BadRequest().json(WsError {
                     error: "File missing.".into(),
                 })
-            } else {
-                if let Some(file) = filepath {
-                    let document = Document::new(token.0, file);
-                    match data.create_document(document.clone()).await {
-                        DataResult::Ok => HttpResponse::Created().json(document),
-                        DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
-                            error: format!("An error occurred: {:#?}", e),
-                        }),
-                    }
-                } else {
-                    HttpResponse::InternalServerError().json(WsError {
-                        error: "An error occurred".into(),
-                    })
+            } else if let Some(file) = filepath {
+                let document = Document::new(token.0, file);
+                match data.create_document(document.clone()).await {
+                    DataResult::Ok => HttpResponse::Created().json(document),
+                    DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
+                        error: format!("An error occurred: {:#?}", e),
+                    }),
                 }
+            } else {
+                HttpResponse::InternalServerError().json(WsError {
+                    error: "An error occurred".into(),
+                })
             }
         } else {
             HttpResponse::NotAcceptable().json(WsError {

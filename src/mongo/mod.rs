@@ -163,11 +163,8 @@ impl MongoDB {
             Ok(mut cursor) => {
                 let mut results = Vec::new();
                 while let Some(document) = cursor.next().await {
-                    match document {
-                        Ok(document) => {
-                            results.push(T::from_document(document).unwrap_or(T::default()));
-                        }
-                        Err(_) => {}
+                    if let Ok(document) = document {
+                        results.push(T::from_document(document).unwrap_or_else(|_| T::default()));
                     }
                 }
 
@@ -212,7 +209,7 @@ impl MongoDB {
                         self.cache
                             .insert::<T>(
                                 id.clone(),
-                                Some(T::from_document(document).unwrap_or(T::default())),
+                                Some(T::from_document(document).unwrap_or_else(|_| T::default())),
                             )
                             .await;
                     }

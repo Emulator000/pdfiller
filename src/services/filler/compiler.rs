@@ -36,7 +36,7 @@ pub enum ExportCompilerResult {
 pub async fn compile_documents<F: FileProvider + ?Sized>(
     file_type: Arc<Box<F>>,
     map: &PDFillerMap,
-    documents: &Vec<Document>,
+    documents: &[Document],
 ) -> HandlerCompilerResult {
     for document in documents.iter() {
         match compile_document(file_type.clone(), map, &document).await {
@@ -97,16 +97,16 @@ pub async fn compile_document<F: FileProvider + ?Sized>(
                                 }
                             }
                         } else {
-                            HandlerCompilerResult::Error(format!(
-                                "Error saving a PDF file, aborted.",
-                            ))
+                            HandlerCompilerResult::Error(
+                                "Error saving a PDF file, aborted.".to_string(),
+                            )
                         }
                     }
-                    _ => {
-                        HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",))
-                    }
+                    _ => HandlerCompilerResult::Error(
+                        "Error saving a PDF file, aborted.".to_string(),
+                    ),
                 },
-                _ => HandlerCompilerResult::Error(format!("Error saving a PDF file, aborted.",)),
+                _ => HandlerCompilerResult::Error("Error saving a PDF file, aborted.".to_string()),
             },
             _ => HandlerCompilerResult::FillingError(e),
         },
@@ -203,18 +203,16 @@ pub async fn merge_documents<F: FileProvider + ?Sized>(
                 },
             }
         } else {
-            ExportCompilerResult::Error(format!("Error getting the compiled PDF file."))
+            ExportCompilerResult::Error("Error getting the compiled PDF file.".to_string())
         }
     } else {
         let documents_objects = processor::get_documents_containers(documents, compiled);
         if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
             ExportCompilerResult::Error("Cannot extract PDFs documents".into())
+        } else if let Some(mut document) = processor::process_documents(documents_objects) {
+            get_document_buffer(&mut document)
         } else {
-            if let Some(mut document) = processor::process_documents(documents_objects) {
-                get_document_buffer(&mut document)
-            } else {
-                ExportCompilerResult::Error(format!("Error decoding the PDFs files."))
-            }
+            ExportCompilerResult::Error("Error decoding the PDFs files.".to_string())
         }
     }
 }

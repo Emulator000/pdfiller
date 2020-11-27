@@ -16,7 +16,7 @@ use crate::utils;
 pub type PDFillerMap = HashMap<String, Value>;
 
 const REQUIRED_MARKER: char = '!';
-const IMAGE_REGEX: &'static str = r"_af_image$";
+const IMAGE_REGEX: &str = r"_af_image$";
 
 #[derive(Debug)]
 pub enum FillingError {
@@ -42,7 +42,7 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                         Err(FillingError::RequiredField(name.to_owned()))
                                     } else if let Some(value) = value {
                                         form.set_text(index, value.as_str().unwrap_or("").into())
-                                            .map_err(|e| FillingError::Value(e))
+                                            .map_err(FillingError::Value)
                                     } else {
                                         Ok(())
                                     }
@@ -52,7 +52,7 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                         Err(FillingError::RequiredField(name.to_owned()))
                                     } else if let Some(value) = value {
                                         form.set_radio(index, value.as_str().unwrap_or("").into())
-                                            .map_err(|e| FillingError::Value(e))
+                                            .map_err(FillingError::Value)
                                     } else {
                                         Ok(())
                                     }
@@ -62,7 +62,7 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                         Err(FillingError::RequiredField(name.to_owned()))
                                     } else if let Some(value) = value {
                                         form.set_check_box(index, value.as_bool().unwrap_or(false))
-                                            .map_err(|e| FillingError::Value(e))
+                                            .map_err(FillingError::Value)
                                     } else {
                                         Ok(())
                                     }
@@ -82,7 +82,7 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                                         })
                                                         .collect(),
                                                 )
-                                                .map_err(|e| FillingError::Value(e)),
+                                                .map_err(FillingError::Value),
                                             None => Ok(()),
                                         }
                                     } else {
@@ -104,7 +104,7 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                                         })
                                                         .collect(),
                                                 )
-                                                .map_err(|e| FillingError::Value(e)),
+                                                .map_err(FillingError::Value),
                                             None => Ok(()),
                                         }
                                     } else {
@@ -114,6 +114,8 @@ pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<For
                                 _ => Ok(()),
                             }
                         } else {
+                            // This is needed as the current regex is a bit unuseful
+                            #[allow(clippy::trivial_regex)]
                             let image_regex = Regex::new(IMAGE_REGEX)
                                 .map_err(|_err| FillingError::InternalError)?;
 

@@ -30,7 +30,7 @@ use crate::file::s3::S3;
 use crate::mongo::wrapper::MongoWrapper;
 use crate::mongo::MongoDB;
 
-const API_VERSION: &'static str = "v1";
+const API_VERSION: &str = "v1";
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {

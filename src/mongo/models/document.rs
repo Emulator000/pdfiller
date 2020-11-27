@@ -52,7 +52,7 @@ impl Model for Document {
         doc! {
             "token": self.token.clone(),
             "file": self.file.clone(),
-            "date": self.date.clone(),
+            "date": self.date,
         }
     }
 
@@ -61,7 +61,7 @@ impl Model for Document {
         // bson::from_bson::<Document>(bson::Bson::Document(document)).unwrap_or(Self::default())
 
         Ok(Self {
-            id: Some(document.get_object_id("_id")?.to_hex().to_owned()),
+            id: Some(document.get_object_id("_id")?.to_hex()),
             token: document.get_str("token")?.to_owned(),
             file: document.get_str("file")?.to_owned(),
             date: document.get_datetime("date")?.to_owned(),
