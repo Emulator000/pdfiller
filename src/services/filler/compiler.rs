@@ -12,7 +12,7 @@ use lopdf::{Document as PdfDocument, Error};
 
 use zip::write::FileOptions;
 
-use crate::file::{FileError, FileProvider, FileResult};
+use crate::file::{FileError, FileProvider};
 use crate::mongo::models::document::Document;
 use crate::services::filler::form;
 use crate::services::filler::form::FillingError;
@@ -20,42 +20,38 @@ use crate::services::filler::processor;
 
 pub type PDFillerMap = HashMap<String, Value>;
 
-pub enum HandlerCompilerResult {
-    Success,
+pub type HandlerCompilerResult<T> = Result<T, HandlerCompilerError>;
+
+pub enum HandlerCompilerError {
     FillingError(FillingError),
     Error(String),
 }
 
-pub enum ExportCompilerResult {
-    Success(Vec<u8>),
-    Error(String),
+pub type ExportCompilerResult<T> = Result<T, ExportCompilerError>;
+
+pub enum ExportCompilerError {
+    GenericError(String),
 }
 
 pub async fn compile_documents<F: FileProvider + ?Sized>(
     file_type: Arc<Box<F>>,
     map: &PDFillerMap,
     documents: &[Document],
-) -> HandlerCompilerResult {
+) -> HandlerCompilerResult<()> {
     for document in documents.iter() {
-        match compile_document(file_type.clone(), map, &document).await {
-            HandlerCompilerResult::FillingError(e) => {
-                return HandlerCompilerResult::FillingError(e);
-            }
-            HandlerCompilerResult::Error(message) => {
-                return HandlerCompilerResult::Error(message);
-            }
-            HandlerCompilerResult::Success => {}
+        if let Err(e) = compile_document(file_type.clone(), map, &document).await {
+            return Err(e);
         }
     }
 
-    HandlerCompilerResult::Success
+    Ok(())
 }
 
 pub async fn compile_document<F: FileProvider + ?Sized>(
     file_type: Arc<Box<F>>,
     map: &PDFillerMap,
     document: &Document,
-) -> HandlerCompilerResult {
+) -> HandlerCompilerResult<()> {
     match form::fields_filler(map, document).await {
         Ok(mut form) => {
             if let Some(compiled_filename) =
@@ -67,14 +63,16 @@ pub async fn compile_document<F: FileProvider + ?Sized>(
                     Err(e) => {
                         sentry::capture_error(&e);
 
-                        HandlerCompilerResult::Error(format!(
+                        Err(HandlerCompilerError::Error(format!(
                             "Error {:#?} saving a PDF file, aborted.",
                             e
-                        ))
+                        )))
                     }
                 }
             } else {
-                HandlerCompilerResult::Error("Error saving a PDF file, aborted.".into())
+                Err(HandlerCompilerError::Error(
+                    "Error saving a PDF file, aborted.".into(),
+                ))
             }
         }
         Err(e) => match e {
@@ -88,21 +86,23 @@ pub async fn compile_document<F: FileProvider + ?Sized>(
                             Err(e) => {
                                 sentry::capture_error(&e);
 
-                                HandlerCompilerResult::Error(format!(
+                                Err(HandlerCompilerError::Error(format!(
                                     "Error {:#?} saving a PDF file, aborted.",
                                     e
-                                ))
+                                )))
                             }
                         }
                     } else {
-                        HandlerCompilerResult::Error(
+                        Err(HandlerCompilerError::Error(
                             "Error saving a PDF file, aborted.".to_string(),
-                        )
+                        ))
                     }
                 }
-                _ => HandlerCompilerResult::Error("Error saving a PDF file, aborted.".to_string()),
+                _ => Err(HandlerCompilerError::Error(
+                    "Error saving a PDF file, aborted.".to_string(),
+                )),
             },
-            _ => HandlerCompilerResult::FillingError(e),
+            _ => Err(HandlerCompilerError::FillingError(e)),
         },
     }
 }
@@ -111,7 +111,7 @@ pub async fn zip_documents<F: FileProvider + ?Sized>(
     file_type: Arc<Box<F>>,
     documents: Vec<Document>,
     compiled: bool,
-) -> ExportCompilerResult {
+) -> ExportCompilerResult<Vec<u8>> {
     let buf = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
@@ -128,28 +128,30 @@ pub async fn zip_documents<F: FileProvider + ?Sized>(
                         Ok(buffer) => match zip.write_all(&buffer) {
                             Ok(_) => {}
                             Err(e) => {
-                                return ExportCompilerResult::Error(format!(
+                                return Err(ExportCompilerError::GenericError(format!(
                                     "Error making a ZIP file: {:#?}",
                                     e
-                                ));
+                                )));
                             }
                         },
                         Err(e) => {
-                            return ExportCompilerResult::Error(format!(
+                            return Err(ExportCompilerError::GenericError(format!(
                                 "Error making a ZIP file: {:#?}",
                                 e
-                            ));
+                            )));
                         }
                     },
                     None => {
-                        return ExportCompilerResult::Error("Error making a ZIP file.".into());
+                        return Err(ExportCompilerError::GenericError(
+                            "Error making a ZIP file.".into(),
+                        ));
                     }
                 },
                 Err(e) => {
-                    return ExportCompilerResult::Error(format!(
+                    return Err(ExportCompilerError::GenericError(format!(
                         "Error making a ZIP file: {:#?}",
                         e
-                    ));
+                    )));
                 }
             }
         }
@@ -159,14 +161,14 @@ pub async fn zip_documents<F: FileProvider + ?Sized>(
     let mut bytes = zip_result.unwrap_or_default();
     let _ = bytes.seek(SeekFrom::Start(0));
 
-    ExportCompilerResult::Success(bytes.get_ref().to_vec())
+    Ok(bytes.get_ref().to_vec())
 }
 
 pub async fn merge_documents<F: FileProvider + ?Sized>(
     file_type: Arc<Box<F>>,
     mut documents: Vec<Document>,
     compiled: bool,
-) -> ExportCompilerResult {
+) -> ExportCompilerResult<Vec<u8>> {
     if documents.len() == 1 {
         let document = documents.pop().unwrap();
         if let Some(ref file_path) = if compiled {
@@ -180,38 +182,43 @@ pub async fn merge_documents<F: FileProvider + ?Sized>(
                     Err(e) => {
                         sentry::capture_error(&e);
 
-                        ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
+                        Err(ExportCompilerError::GenericError(format!(
+                            "Error loading the PDF: {:#?}",
+                            e
+                        )))
                     }
                 },
-                Err(error) => match error {
-                    FileError::IoError(e) => {
-                        sentry::capture_error(&e);
+                Err(e) => {
+                    sentry::capture_error(&e);
 
-                        ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
-                    }
-                    FileError::S3Error(e) => {
-                        sentry::capture_error(&e);
-
-                        ExportCompilerResult::Error(format!("Error loading the PDF: {:#?}", e))
-                    }
-                },
+                    Err(ExportCompilerError::GenericError(format!(
+                        "Error loading the PDF: {:#?}",
+                        e
+                    )))
+                }
             }
         } else {
-            ExportCompilerResult::Error("Error getting the compiled PDF file.".to_string())
+            Err(ExportCompilerError::GenericError(
+                "Error getting the compiled PDF file.".to_string(),
+            ))
         }
     } else {
         let documents_objects = processor::get_documents_containers(file_type, documents, compiled);
         if documents_objects.pages.is_empty() || documents_objects.objects.is_empty() {
-            ExportCompilerResult::Error("Cannot extract PDFs documents".into())
+            Err(ExportCompilerError::GenericError(
+                "Cannot extract PDFs documents".into(),
+            ))
         } else if let Some(mut document) = processor::process_documents(documents_objects) {
             get_document_buffer(&mut document)
         } else {
-            ExportCompilerResult::Error("Error decoding the PDFs files.".to_string())
+            Err(ExportCompilerError::GenericError(
+                "Error decoding the PDFs files.".to_string(),
+            ))
         }
     }
 }
 
-fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult {
+fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult<Vec<u8>> {
     let buf = Vec::<u8>::new();
     let mut cursor = Cursor::new(buf);
 
@@ -219,12 +226,12 @@ fn get_document_buffer(document: &mut PdfDocument) -> ExportCompilerResult {
         Ok(_) => {
             let _ = cursor.seek(SeekFrom::Start(0));
 
-            ExportCompilerResult::Success(cursor.get_ref().to_vec())
+            Ok(cursor.get_ref().to_vec())
         }
-        Err(e) => ExportCompilerResult::Error(format!(
+        Err(e) => Err(ExportCompilerError::GenericError(format!(
             "An error {:#?} occurred saving the PDFs files.",
             e
-        )),
+        ))),
     }
 }
 
@@ -232,24 +239,35 @@ async fn save_compiled_file<F: FileProvider + ?Sized>(
     file_type: Arc<Box<F>>,
     file_path: String,
     buf: Vec<u8>,
-) -> HandlerCompilerResult {
+) -> HandlerCompilerResult<()> {
     match file_type.save(file_path.as_str(), buf).await {
-        FileResult::Saved => HandlerCompilerResult::Success,
-        FileResult::Error(e) => {
+        Ok(_) => Ok(()),
+        Err(FileError::IoError(e)) => {
             sentry::capture_error(&e);
 
-            HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
+            Err(HandlerCompilerError::Error(format!(
+                "Error {:#?} saving a PDF file, aborted.",
+                e
+            )))
         }
-        FileResult::BlockingError(e) => {
+        Err(FileError::BlockingError(e)) => {
             sentry::capture_error(&e);
 
-            HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
+            Err(HandlerCompilerError::Error(format!(
+                "Error {:#?} saving a PDF file, aborted.",
+                e
+            )))
         }
-        FileResult::S3Error(e) => {
+        Err(FileError::S3Error(e)) => {
             sentry::capture_error(&e);
 
-            HandlerCompilerResult::Error(format!("Error {:#?} saving a PDF file, aborted.", e))
+            Err(HandlerCompilerError::Error(format!(
+                "Error {:#?} saving a PDF file, aborted.",
+                e
+            )))
         }
-        _ => HandlerCompilerResult::Error("Error: cannot save the file.".into()),
+        _ => Err(HandlerCompilerError::Error(
+            "Error: cannot save the file.".into(),
+        )),
     }
 }

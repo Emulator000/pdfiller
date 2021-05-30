@@ -41,10 +41,10 @@ pub fn get_accepted_header(request: &web::HttpRequest) -> Option<String> {
 
 pub fn export_content<S: AsRef<str>>(
     accept: S,
-    export_result: compiler::ExportCompilerResult,
+    export_result: compiler::ExportCompilerResult<Vec<u8>>,
 ) -> HttpResponse {
     match export_result {
-        compiler::ExportCompilerResult::Success(bytes) => HttpResponse::Ok()
+        Ok(bytes) => HttpResponse::Ok()
             .encoding(ContentEncoding::Identity)
             .content_type(accept.as_ref())
             .header("accept-ranges", "bytes")
@@ -60,7 +60,7 @@ pub fn export_content<S: AsRef<str>>(
                 ),
             )
             .body(bytes),
-        compiler::ExportCompilerResult::Error(message) => {
+        Err(compiler::ExportCompilerError::GenericError(message)) => {
             HttpResponse::InternalServerError().json(WsError { error: message })
         }
     }

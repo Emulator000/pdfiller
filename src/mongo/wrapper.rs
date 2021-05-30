@@ -1,5 +1,5 @@
 use crate::mongo::models::Model;
-use crate::mongo::{Error, MongoDB};
+use crate::mongo::{MongoDB, MongoResult};
 
 #[derive(Clone)]
 pub struct MongoWrapper {
@@ -25,7 +25,7 @@ impl MongoWrapper {
         self.mongo.get::<T, _>(Some((key, value)), sort_by).await
     }
 
-    pub async fn create<T: 'static + Model>(&self, model: T) -> Result<(), Error> {
+    pub async fn create<T: 'static + Model>(&self, model: T) -> MongoResult<()> {
         self.mongo.insert::<T>(model).await
     }
 }

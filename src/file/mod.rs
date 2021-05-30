@@ -1,33 +1,49 @@
 pub mod local;
 pub mod s3;
 
+use std::fmt;
 use std::io::Error;
 
-use async_trait::async_trait;
-
-use actix_rt::blocking::BlockingError;
-
-use uuid::Uuid;
-
 use ::s3::S3Error;
+use actix_web::error::BlockingError;
+use async_trait::async_trait;
+use serde::de::StdError;
+use uuid::Uuid;
 
 use crate::client;
 
 pub const PATH_COMPILED: &str = "compiled/";
 
-pub enum FileResult {
-    Saved,
-    NotSaved,
-    Error(Error),
-    BlockingError(BlockingError<Error>),
-    S3Error(S3Error),
-}
+pub type FileResult<T> = Result<T, FileError>;
 
 #[derive(Debug)]
 pub enum FileError {
+    NotSaved,
+    BlockingError(BlockingError<Error>),
     IoError(Error),
     S3Error(S3Error),
 }
+
+impl fmt::Display for FileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotSaved => {
+                write!(f, "File couldn't be saved")
+            }
+            FileError::BlockingError(e) => {
+                write!(f, "{:#?}", e)
+            }
+            FileError::IoError(e) => {
+                write!(f, "{:#?}", e)
+            }
+            FileError::S3Error(e) => {
+                write!(f, "{:#?}", e)
+            }
+        }
+    }
+}
+
+impl StdError for FileError {}
 
 #[async_trait]
 pub trait FileProvider: Send + Sync {
@@ -50,16 +66,16 @@ pub trait FileProvider: Send + Sync {
         if let Some(pdf) = client::get(uri).await {
             let remote_file_path = self.generate_filepath("file.pdf");
             match self.save(remote_file_path.as_str(), pdf).await {
-                FileResult::Saved => {
+                Ok(_) => {
                     filepath = Some(remote_file_path.clone());
                 }
-                FileResult::Error(e) => {
+                Err(FileError::IoError(e)) => {
                     sentry::capture_error(&e);
                 }
-                FileResult::S3Error(e) => {
+                Err(FileError::S3Error(e)) => {
                     sentry::capture_error(&e);
                 }
-                FileResult::BlockingError(e) => {
+                Err(FileError::BlockingError(e)) => {
                     sentry::capture_error(&e);
                 }
                 _ => {}
@@ -69,9 +85,9 @@ pub trait FileProvider: Send + Sync {
         filepath
     }
 
-    async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError>;
+    async fn load(&self, file_path: &str) -> FileResult<Vec<u8>>;
 
-    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult;
+    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult<()>;
 
     fn base_path(&self) -> &str;
 }

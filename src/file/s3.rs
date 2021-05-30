@@ -35,17 +35,17 @@ impl S3 {
 
 #[async_trait]
 impl FileProvider for S3 {
-    async fn load(&self, file_path: &str) -> Result<Vec<u8>, FileError> {
+    async fn load(&self, file_path: &str) -> FileResult<Vec<u8>> {
         match self.bucket.get_object(file_path).await {
             Ok((data, _code)) => Ok(data),
             Err(e) => Err(FileError::S3Error(e)),
         }
     }
 
-    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult {
+    async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult<()> {
         match self.bucket.put_object(file_path, &data).await {
-            Ok((_data, _code)) => FileResult::Saved,
-            Err(e) => FileResult::S3Error(e),
+            Ok((_data, _code)) => Ok(()),
+            Err(e) => Err(FileError::S3Error(e)),
         }
     }
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_std::sync::RwLock;
 use bson::{doc, oid::ObjectId};
 use futures_lite::StreamExt;
-use log::{error, info};
+use log::error;
 use mongodb::error::Error as MongoDBError;
 use mongodb::options::{ClientOptions, FindOptions};
 use mongodb::{Client, Collection, Database};
@@ -81,7 +81,7 @@ impl MongoDB {
             .insert_one(model.to_document(), None)
             .await
             .map_err(|e| {
-                info!(
+                error!(
                     "Error getting {} with model {}: {:#?}",
                     T::name(),
                     model.debug(),
@@ -96,13 +96,13 @@ impl MongoDB {
                 if let Some(object_id) = result.inserted_id.as_object_id() {
                     self.cache
                         .insert::<T>(object_id.to_owned(), Some(model))
-                        .map_err(|e| Error::CacheError(e))?;
+                        .map_err(Error::CacheError)?;
                 }
 
                 Ok(())
             }
             Err(e) => {
-                info!(
+                error!(
                     "Error getting {} with model {}: {:#?}",
                     T::name(),
                     model.debug(),
@@ -129,7 +129,7 @@ impl MongoDB {
             )
             .await
             .map_err(|e| {
-                info!("Error getting {} with key {}: {:#?}", T::name(), &id, e);
+                error!("Error getting {} with key {}: {:#?}", T::name(), &id, e);
 
                 sentry::capture_error(&e);
 
@@ -138,7 +138,7 @@ impl MongoDB {
 
         self.cache
             .insert::<T>(id, Some(model))
-            .map_err(|e| Error::CacheError(e))?;
+            .map_err(Error::CacheError)?;
 
         Ok(())
     }
@@ -195,64 +195,9 @@ impl MongoDB {
 
     #[allow(dead_code)]
     pub async fn get_one<T: 'static + Model, S: AsRef<str>>(&self, id: ObjectId) -> Option<Arc<T>> {
-        // self.cache
-        //     .get::<T, _>(&id)
-        //     .map(|value| {
-        //         if let Some(value) = value {
-        //             value
-        //         } else {
-        //             match self
-        //                 .get_collection(T::name())
-        //                 .await
-        //                 .find_one(
-        //                     doc! {
-        //                         "_id": id.clone(),
-        //                     },
-        //                     None,
-        //                 )
-        //                 .await
-        //             {
-        //                 Ok(result) => match result {
-        //                     Some(document) => {
-        //                         self.cache
-        //                             .insert::<T>(
-        //                                 id.clone(),
-        //                                 Some(
-        //                                     T::from_document(document)
-        //                                         .unwrap_or_else(|_| T::default()),
-        //                                 ),
-        //                             )
-        //                             .map_err(|e| Error::CacheError(e))?;
-        //                     }
-        //                     None => {
-        //                         self.cache
-        //                             .insert::<T>(id.clone(), None)
-        //                             .map_err(|e| Error::CacheError(e))?;
-        //                     }
-        //                 },
-        //                 Err(e) => {
-        //                     error!("Error getting {} with key {}: {:#?}", T::name(), &id, e);
-        //
-        //                     sentry::capture_error(&e);
-        //
-        //                     self.cache
-        //                         .insert::<T>(id.clone(), None)
-        //                         .map_err(|e| Error::CacheError(e))?;
-        //                 }
-        //             }
-        //
-        //             self.cache
-        //                 .get::<T, _>(&id)
-        //                 .map(|value| if let Some(value) = value { value } else { None })
-        //                 .ok()
-        //         }
-        //     })
-        //     .ok()
-
-        if let Ok(result) = self.cache.get::<T, _>(&id) {
-            if let Some(value) = result {
-                value
-            } else {
+        match self.cache.get::<T, _>(&id) {
+            Ok(Some(value)) => value,
+            Ok(None) => {
                 match self
                     .get_collection(T::name())
                     .await
@@ -284,18 +229,13 @@ impl MongoDB {
                     }
                 }
 
-                if let Ok(result) = self.cache.get::<T, _>(&id) {
-                    if let Some(value) = result {
-                        value
-                    } else {
-                        None
-                    }
+                if let Ok(Some(value)) = self.cache.get::<T, _>(&id) {
+                    value
                 } else {
                     None
                 }
             }
-        } else {
-            None
+            Err(_) => None,
         }
     }
 
@@ -317,9 +257,9 @@ impl MongoDB {
 
                 e
             })
-            .map_err(|e| Error::MongoDBError(e))?;
+            .map_err(Error::MongoDBError)?;
 
-        self.cache.remove(&id).map_err(|e| Error::CacheError(e))?;
+        self.cache.remove(&id).map_err(Error::CacheError)?;
 
         Ok(())
     }

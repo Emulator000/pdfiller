@@ -18,6 +18,8 @@ pub type PDFillerMap = HashMap<String, Value>;
 const REQUIRED_MARKER: char = '!';
 const IMAGE_REGEX: &str = r"_af_image$";
 
+pub type FormResult = Result<Form, FillingError>;
+
 #[derive(Debug)]
 pub enum FillingError {
     Load(LoadError),
@@ -26,7 +28,7 @@ pub enum FillingError {
     InternalError,
 }
 
-pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> Result<Form, FillingError> {
+pub async fn fields_filler(map: &PDFillerMap, document: &Document) -> FormResult {
     match Form::load(&document.file) {
         Ok(mut form) => {
             for (index, name) in form.get_all_names().iter().enumerate() {

@@ -4,7 +4,7 @@ use futures_lite::stream::StreamExt;
 use serde::Deserialize;
 
 use crate::data::Data;
-use crate::file::FileResult;
+use crate::file::FileError;
 use crate::mongo::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
 
@@ -41,10 +41,10 @@ pub async fn post_document(
                                     Ok(buf) => {
                                         let local_filepath = data.file.generate_filepath(&filename);
                                         match data.file.save(&local_filepath, buf).await {
-                                            FileResult::Saved => {
+                                            Ok(_) => {
                                                 filepath = Some(local_filepath);
                                             }
-                                            FileResult::S3Error(e) => {
+                                            Err(FileError::S3Error(e)) => {
                                                 sentry::capture_error(&e);
 
                                                 return HttpResponse::InternalServerError().json(WsError {
@@ -54,7 +54,7 @@ pub async fn post_document(
                                                     ),
                                                 });
                                             }
-                                            FileResult::Error(e) => {
+                                            Err(FileError::IoError(e)) => {
                                                 sentry::capture_error(&e);
 
                                                 return HttpResponse::InternalServerError().json(WsError {

@@ -48,7 +48,7 @@ pub async fn compile_documents(
                                 )
                                 .await
                                 {
-                                    compiler::HandlerCompilerResult::Success => {
+                                    Ok(_) => {
                                         if let Some(accept) =
                                             services::get_accepted_header(&request)
                                         {
@@ -76,7 +76,7 @@ pub async fn compile_documents(
                                             })
                                         }
                                     }
-                                    compiler::HandlerCompilerResult::FillingError(e) => {
+                                    Err(compiler::HandlerCompilerError::FillingError(e)) => {
                                         HttpResponse::BadRequest().json(WsError {
                                             error: format!(
                                                 "Error during document filling: {:#?}",
@@ -84,7 +84,7 @@ pub async fn compile_documents(
                                             ),
                                         })
                                     }
-                                    compiler::HandlerCompilerResult::Error(message) => {
+                                    Err(compiler::HandlerCompilerError::Error(message)) => {
                                         HttpResponse::InternalServerError()
                                             .json(WsError { error: message })
                                     }

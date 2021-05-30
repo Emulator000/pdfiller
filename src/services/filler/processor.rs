@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::str;
 
 use async_std::sync::Arc;
-use log::info;
+use log::error;
 use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 
 use crate::file::FileProvider;
@@ -54,7 +54,7 @@ pub fn get_documents_containers<F: FileProvider + ?Sized>(
                 Err(e) => {
                     sentry::capture_error(&e);
 
-                    info!("Error loading the PDF: {:#?}", e);
+                    error!("Error loading the PDF: {:#?}", e);
                 }
             }
         }
