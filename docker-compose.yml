@@ -39,7 +39,7 @@ services:
     build: ./.docker/images/web
     container_name: pf-nginx
     volumes:
-      - "./.docker/config/nginx:/etc/nginx"
+      - "./.docker/config/nginx/nginx.conf:/etc/nginx/conf.d/pdfiller.conf"
     ulimits:
       nproc: 1000000
       nofile:

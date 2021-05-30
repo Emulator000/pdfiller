@@ -15,8 +15,8 @@ bind_port = ${PF_WS_PORT}
 host = "${PF_MONGO_HOST}"
 port = ${PF_MONGO_PORT}
 db_name = "${PF_MONGO_DB_NAME}"
-user = "${PF_MONGO_USER}"
-password = "${PF_MONGO_PASSWORD}"
+#user = "${PF_MONGO_USER}"
+#password = "${PF_MONGO_PASSWORD}"
 
 [sentry]
 dsn = "${PF_SENTRY_DSN}"
