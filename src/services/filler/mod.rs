@@ -34,7 +34,9 @@ pub async fn compile_documents(
                 if let Some(value) = values.get("data") {
                     match <compiler::PDFillerMap>::deserialize(value) {
                         Ok(ref map) => {
-                            if let Some(documents) = data.get_documents_by_token(&token.0).await {
+                            if let Some(documents) =
+                                data.get_documents_by_token(token.as_str()).await
+                            {
                                 if documents.is_empty() {
                                     return HttpResponse::NotFound().json(WsError {
                                         error: "No documents found for this token!".into(),

@@ -9,10 +9,7 @@ mod utils;
 use std::io::Write;
 
 use actix_web::{
-    middleware::{
-        normalize::{NormalizePath, TrailingSlash},
-        Logger,
-    },
+    middleware::{Logger, NormalizePath, TrailingSlash},
     web, App, HttpServer,
 };
 use chrono::Local as ChronoLocal;

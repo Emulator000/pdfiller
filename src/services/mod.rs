@@ -47,8 +47,8 @@ pub fn export_content<S: AsRef<str>>(
         Ok(bytes) => HttpResponse::Ok()
             .encoding(ContentEncoding::Identity)
             .content_type(accept.as_ref())
-            .header("accept-ranges", "bytes")
-            .header(
+            .append_header(("accept-ranges", "bytes"))
+            .append_header((
                 "content-disposition",
                 format!(
                     "attachment; filename=\"pdf.{}\"",
@@ -58,7 +58,7 @@ pub fn export_content<S: AsRef<str>>(
                         "pdf"
                     }
                 ),
-            )
+            ))
             .body(bytes),
         Err(compiler::ExportCompilerError::GenericError(message)) => {
             HttpResponse::InternalServerError().json(WsError { error: message })

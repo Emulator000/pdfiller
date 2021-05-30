@@ -120,7 +120,7 @@ pub async fn post_document(
             error: "File missing.".into(),
         })
     } else if let Some(file) = filepath {
-        let document = Document::new(token.0, file);
+        let document = Document::new(token.to_string(), file);
         match data.create_document(document.clone()).await {
             Ok(_) => HttpResponse::Created().json(document),
             Err(e) => HttpResponse::InternalServerError().json(WsError {
@@ -140,7 +140,7 @@ pub async fn get_document(
     token: web::Path<String>,
     request: web::HttpRequest,
 ) -> impl Responder {
-    if let Some(documents) = data.get_documents_by_token(&token.0).await {
+    if let Some(documents) = data.get_documents_by_token(token.as_str()).await {
         if documents.is_empty() {
             return HttpResponse::NotFound().json(WsError {
                 error: "No documents found for this token!".into(),
@@ -183,7 +183,7 @@ pub async fn get_documents_by_token(
     data: web::Data<Data>,
     token: web::Path<String>,
 ) -> impl Responder {
-    if let Some(documents) = data.get_documents_by_token(&token.0).await {
+    if let Some(documents) = data.get_documents_by_token(token.as_str()).await {
         HttpResponse::Ok().json(documents)
     } else {
         HttpResponse::NotFound().json(WsError {

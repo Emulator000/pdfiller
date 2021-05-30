@@ -19,7 +19,7 @@ pub type FileResult<T> = Result<T, FileError>;
 #[derive(Debug)]
 pub enum FileError {
     NotSaved,
-    BlockingError(BlockingError<Error>),
+    BlockingError(BlockingError),
     IoError(Error),
     S3Error(S3Error),
 }

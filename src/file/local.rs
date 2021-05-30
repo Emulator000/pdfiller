@@ -31,10 +31,11 @@ impl FileProvider for Local {
                 Ok(_) => {
                     let file_path: String = file_path.into();
                     match web::block(|| fs::File::create(file_path)).await {
-                        Ok(mut file) => match file.write_all(&data) {
+                        Ok(Ok(mut file)) => match file.write_all(&data) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(FileError::IoError(e)),
                         },
+                        Ok(Err(e)) => Err(FileError::IoError(e)),
                         Err(e) => Err(FileError::BlockingError(e)),
                     }
                 }
