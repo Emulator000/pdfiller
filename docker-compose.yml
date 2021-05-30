@@ -1,13 +1,13 @@
 version: '3.8'
 services:
   pdfiller:
-    build: docker/images/pdfiller
-    container_name: pf_core
+    build: ./.docker/images/pdfiller
+    container_name: pf-core
     working_dir: /home
     volumes:
       - "./config/config.toml:/home/config/config.toml"
       - "./target/debug/pdfiller:/home/pdfiller"
-      - "./docker/scripts/pdfiller/start.sh:/home/pdfiller.sh"
+      - "./.docker/scripts/pdfiller/start.sh:/home/pdfiller.sh"
       - "./logs:/home/logs"
       - "./tmp:/home/tmp"
     ulimits:
@@ -26,8 +26,8 @@ services:
       - nginx
 
   mongo:
-    build: ./docker/images/mongo
-    container_name: pf_mongo
+    build: ./.docker/images/mongo
+    container_name: pf-mongo
     expose:
       - $PF_MONGO_PORT
     volumes:
@@ -36,15 +36,15 @@ services:
       - $PF_MONGO_PUBLIC_PORT:$PF_MONGO_PORT
 
   nginx:
-    build: ./docker/images/web
-    container_name: pf_nginx
+    build: ./.docker/images/web
+    container_name: pf-nginx
     volumes:
-      - "./docker/config/nginx:/etc/nginx"
+      - "./.docker/config/nginx:/etc/nginx"
     ulimits:
       nproc: 1000000
       nofile:
         soft: 1000000
         hard: 1000000
     ports:
-      - $PF_WS_PUBLIC_PORT:$PF_WS_PORT
+      - $PF_WS_PUBLIC_PORT:8080
     restart: always

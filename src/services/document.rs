@@ -24,54 +24,27 @@ pub struct FormData {
 pub async fn post_document(
     data: web::Data<Data>,
     token: web::Path<String>,
-    request: web::HttpRequest,
     form: Option<web::Form<FormData>>,
     mut payload: Multipart,
 ) -> impl Responder {
-    if let Some(accept) = services::get_accepted_header(&request) {
-        if accept.as_str() == mime::APPLICATION_PDF {
-            let mut filepath = None;
-            if let Some(form) = form {
-                filepath = data.file.download_and_save(form.file.as_str()).await;
-            } else {
-                while let Ok(Some(mut field)) = payload.try_next().await {
-                    if let Some(ref content_type) = field.content_disposition() {
-                        match content_type.get_name() {
-                            Some("file") => match content_type.get_filename() {
-                                Some(filename) => {
-                                    if !filename.is_empty() {
-                                        match read_chuncked_buffer(&mut field).await {
-                                            Ok(buf) => {
-                                                let local_filepath =
-                                                    data.file.generate_filepath(&filename);
-                                                match data.file.save(&local_filepath, buf).await {
-                                                    FileResult::Saved => {
-                                                        filepath = Some(local_filepath);
-                                                    }
-                                                    FileResult::S3Error(e) => {
-                                                        sentry::capture_error(&e);
-
-                                                        return HttpResponse::InternalServerError().json(WsError {
-                                                            error: format!(
-                                                                "An error occurred uploading the file: {:#?}",
-                                                                e
-                                                            ),
-                                                        });
-                                                    }
-                                                    FileResult::Error(e) => {
-                                                        sentry::capture_error(&e);
-
-                                                        return HttpResponse::InternalServerError().json(WsError {
-                                                            error: format!(
-                                                                "An error occurred uploading the file: {:#?}",
-                                                                e
-                                                            ),
-                                                        });
-                                                    }
-                                                    _ => {}
-                                                }
+    let mut filepath = None;
+    if let Some(form) = form {
+        filepath = data.file.download_and_save(form.file.as_str()).await;
+    } else {
+        while let Ok(Some(mut field)) = payload.try_next().await {
+            if let Some(ref content_type) = field.content_disposition() {
+                match content_type.get_name() {
+                    Some("file") => match content_type.get_filename() {
+                        Some(filename) => {
+                            if !filename.is_empty() {
+                                match read_chuncked_buffer(&mut field).await {
+                                    Ok(buf) => {
+                                        let local_filepath = data.file.generate_filepath(&filename);
+                                        match data.file.save(&local_filepath, buf).await {
+                                            FileResult::Saved => {
+                                                filepath = Some(local_filepath);
                                             }
-                                            Err(e) => {
+                                            FileResult::S3Error(e) => {
                                                 sentry::capture_error(&e);
 
                                                 return HttpResponse::InternalServerError().json(WsError {
@@ -81,25 +54,19 @@ pub async fn post_document(
                                                     ),
                                                 });
                                             }
+                                            FileResult::Error(e) => {
+                                                sentry::capture_error(&e);
+
+                                                return HttpResponse::InternalServerError().json(WsError {
+                                                    error: format!(
+                                                        "An error occurred uploading the file: {:#?}",
+                                                        e
+                                                    ),
+                                                });
+                                            }
+                                            _ => {}
                                         }
                                     }
-                                }
-                                None => match read_chuncked_buffer(&mut field).await {
-                                    Ok(buf) => match std::str::from_utf8(buf.as_slice()) {
-                                        Ok(uri) => {
-                                            filepath = data.file.download_and_save(uri).await;
-                                        }
-                                        Err(e) => {
-                                            sentry::capture_error(&e);
-
-                                            return HttpResponse::InternalServerError().json(WsError {
-                                                error: format!(
-                                                    "An error occurred downloading the remote file: {:#?}",
-                                                    e
-                                                ),
-                                            });
-                                        }
-                                    },
                                     Err(e) => {
                                         sentry::capture_error(&e);
 
@@ -110,40 +77,59 @@ pub async fn post_document(
                                             ),
                                         });
                                     }
-                                },
-                            },
-                            Some(_) => {}
-                            None => {}
+                                }
+                            }
                         }
-                    }
-                }
-            }
+                        None => match read_chuncked_buffer(&mut field).await {
+                            Ok(buf) => match std::str::from_utf8(buf.as_slice()) {
+                                Ok(uri) => {
+                                    filepath = data.file.download_and_save(uri).await;
+                                }
+                                Err(e) => {
+                                    sentry::capture_error(&e);
 
-            if filepath.is_none() {
-                HttpResponse::BadRequest().json(WsError {
-                    error: "File missing.".into(),
-                })
-            } else if let Some(file) = filepath {
-                let document = Document::new(token.0, file);
-                match data.create_document(document.clone()).await {
-                    DataResult::Ok => HttpResponse::Created().json(document),
-                    DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
-                        error: format!("An error occurred: {:#?}", e),
-                    }),
+                                    return HttpResponse::InternalServerError().json(WsError {
+                                        error: format!(
+                                            "An error occurred downloading the remote file: {:#?}",
+                                            e
+                                        ),
+                                    });
+                                }
+                            },
+                            Err(e) => {
+                                sentry::capture_error(&e);
+
+                                return HttpResponse::InternalServerError().json(WsError {
+                                    error: format!(
+                                        "An error occurred uploading the file: {:#?}",
+                                        e
+                                    ),
+                                });
+                            }
+                        },
+                    },
+                    Some(_) => {}
+                    None => {}
                 }
-            } else {
-                HttpResponse::InternalServerError().json(WsError {
-                    error: "An error occurred".into(),
-                })
             }
-        } else {
-            HttpResponse::NotAcceptable().json(WsError {
-                error: "Only PDF are accepted".into(),
-            })
+        }
+    }
+
+    if filepath.is_none() {
+        HttpResponse::BadRequest().json(WsError {
+            error: "File missing.".into(),
+        })
+    } else if let Some(file) = filepath {
+        let document = Document::new(token.0, file);
+        match data.create_document(document.clone()).await {
+            DataResult::Ok => HttpResponse::Created().json(document),
+            DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
+                error: format!("An error occurred: {:#?}", e),
+            }),
         }
     } else {
-        HttpResponse::NotAcceptable().json(WsError {
-            error: "Only PDF are accepted".into(),
+        HttpResponse::InternalServerError().json(WsError {
+            error: "An error occurred".into(),
         })
     }
 }
@@ -186,7 +172,9 @@ pub async fn get_documents(data: web::Data<Data>) -> impl Responder {
     if let Some(documents) = data.get_all_documents().await {
         HttpResponse::Ok().json(documents)
     } else {
-        HttpResponse::NoContent().finish()
+        HttpResponse::NotFound().json(WsError {
+            error: "No documents found for this token!".into(),
+        })
     }
 }
 
@@ -198,7 +186,9 @@ pub async fn get_documents_by_token(
     if let Some(documents) = data.get_documents_by_token(&token.0).await {
         HttpResponse::Ok().json(documents)
     } else {
-        HttpResponse::NoContent().finish()
+        HttpResponse::NotFound().json(WsError {
+            error: "No documents found for this token!".into(),
+        })
     }
 }
 

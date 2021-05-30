@@ -1,22 +1,18 @@
-pub mod models;
-pub mod wrapper;
-
 use std::sync::Arc;
 
 use async_std::sync::RwLock;
-
+use bson::oid::ObjectId;
 use futures_lite::StreamExt;
-
 use mongodb::error::Error;
 use mongodb::options::{ClientOptions, FindOptions};
 use mongodb::{Client, Collection, Database};
-
-use bson::oid::ObjectId;
-
 use simple_cache::Cache;
 
 use crate::config::MongoConfig;
 use crate::mongo::models::Model;
+
+pub mod models;
+pub mod wrapper;
 
 #[derive(Clone)]
 pub struct MongoDB {
@@ -29,31 +25,35 @@ impl MongoDB {
     const DEFAULT_PORT: u16 = 27017;
 
     pub async fn new(config: &MongoConfig) -> Self {
-        let connection_str = format!(
-            "{}:{}",
-            config.host,
-            config.port.unwrap_or(Self::DEFAULT_PORT)
-        );
+        let connection_str = match (config.string.as_ref(), config.host.as_ref()) {
+            (Some(connection_str), _) => String::from(connection_str),
+            (None, Some(host)) => {
+                let connection_str =
+                    format!("{}:{}", host, config.port.unwrap_or(Self::DEFAULT_PORT));
 
-        let options = ClientOptions::parse(
-            if let Some(ref user) = config.user {
-                format!(
-                    "{}://{}:{}@{}",
-                    Self::MONGDB_STR,
-                    user,
-                    config.password.as_deref().unwrap_or(""),
-                    connection_str
-                )
-            } else {
-                format!("{}://{}", Self::MONGDB_STR, connection_str)
+                if let Some(ref user) = config.user {
+                    format!(
+                        "{}://{}:{}@{}",
+                        Self::MONGDB_STR,
+                        user,
+                        config.password.as_deref().unwrap_or(""),
+                        connection_str
+                    )
+                } else {
+                    format!("{}://{}", Self::MONGDB_STR, connection_str)
+                }
             }
-            .as_str(),
-        )
-        .await
-        .unwrap_or_else(|e| panic!("Error {:#?} creating connection to {}", e, config.host));
+            (None, None) => {
+                panic!("Missing configuration for MongoDB")
+            }
+        };
+
+        let options = ClientOptions::parse(connection_str.as_str())
+            .await
+            .unwrap_or_else(|e| panic!("Error {:#?} creating connection to MongoDB", e));
 
         let client = Client::with_options(options)
-            .unwrap_or_else(|e| panic!("Error {:#?} connecting to {}", e, config.host));
+            .unwrap_or_else(|e| panic!("Error {:#?} connecting to MongoDB", e));
 
         MongoDB {
             database: Arc::new(RwLock::new(client.database(config.db_name.as_str()))),
@@ -141,13 +141,11 @@ impl MongoDB {
         key_value: Option<(S, S)>,
         sort_by: S,
     ) -> Option<Vec<T>> {
-        let filter = if let Some(ref key_value) = key_value {
-            Some(doc! {
+        let filter = key_value.as_ref().map(|key_value| {
+            doc! {
                 key_value.0.as_ref(): key_value.1.as_ref(),
-            })
-        } else {
-            None
-        };
+            }
+        });
 
         match self
             .get_collection(T::name())

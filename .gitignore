@@ -9,4 +9,4 @@
 **/*.rs.bk
 /*.data
 /*.gz
-
+*.local

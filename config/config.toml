@@ -1,21 +1,22 @@
 [service]
-    filesystem = "${PF_FILESYSTEM}" # Could be "local" or "s3"
-    s3_access_key = "${PF_S3_ACCESS_KEY}" # Mandatory for "s3" filesystem
-    s3_secret_key = "${PF_S3_SECRET_KEY}" # Mandatory for "s3" filesystem
-    s3_bucket = "${PF_S3_BUCKET}" # Mandatory for "s3" filesystem
-    s3_region = "${PF_S3_REGION}" # Mandatory for "s3" filesystem
-    path = "${PF_TEMP_PATH}"
+filesystem = "${PF_FILESYSTEM}" # Could be "local" or "s3"
+s3_access_key = "${PF_S3_ACCESS_KEY}" # Mandatory for "s3" filesystem
+s3_secret_key = "${PF_S3_SECRET_KEY}" # Mandatory for "s3" filesystem
+s3_bucket = "${PF_S3_BUCKET}" # Mandatory for "s3" filesystem
+s3_region = "${PF_S3_REGION}" # Mandatory for "s3" filesystem
+path = "${PF_TEMP_PATH}"
 
 [server]
-    bind_address = "${PF_WS_HOST}"
-    bind_port = ${PF_WS_PORT}
+bind_address = "${PF_WS_HOST}"
+bind_port = ${PF_WS_PORT}
 
 [mongo]
-    host = "${PF_MONGO_HOST}"
-    port = ${PF_MONGO_PORT}
-    db_name = "${PF_MONGO_DB_NAME}"
-#    user = "${PF_MONGO_USER}"
-#    password = "${PF_MONGO_PASSWORD}"
+string = "${PF_MONGO_STRING}"
+#host = "${PF_MONGO_HOST}"
+#port = ${PF_MONGO_PORT}
+db_name = "${PF_MONGO_DB_NAME}"
+#user = "${PF_MONGO_USER}"
+#password = "${PF_MONGO_PASSWORD}"
 
-#[sentry]
-#    dsn = "${PF_SENTRY_DSN}"
+[sentry]
+dsn = "${PF_SENTRY_DSN}"

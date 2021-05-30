@@ -40,6 +40,11 @@ pub trait FileProvider: Send + Sync {
         )
     }
 
+    fn generate_compiled_filepath(&self, file_path: &str) -> Option<String> {
+        crystalsoft_utils::get_filename(file_path)
+            .map(|file_name| format!("{}{}{}", self.base_path(), PATH_COMPILED, file_name))
+    }
+
     async fn download_and_save(&self, uri: &str) -> Option<String> {
         let mut filepath = None;
         if let Some(pdf) = client::get(uri).await {
@@ -69,11 +74,4 @@ pub trait FileProvider: Send + Sync {
     async fn save(&self, file_path: &str, data: Vec<u8>) -> FileResult;
 
     fn base_path(&self) -> &str;
-}
-
-pub fn get_compiled_filepath<S: AsRef<str>>(file_path: S) -> Option<String> {
-    match crystalsoft_utils::get_filename(file_path) {
-        Some(file_name) => Some(format!("{}{}", PATH_COMPILED, file_name)),
-        None => None,
-    }
 }

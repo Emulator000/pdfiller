@@ -28,7 +28,8 @@ pub struct ServerConfig {
 
 #[derive(Clone, Deserialize)]
 pub struct MongoConfig {
-    pub host: String,
+    pub string: Option<String>,
+    pub host: Option<String>,
     pub port: Option<u16>,
     pub db_name: String,
     pub user: Option<String>,
@@ -43,11 +44,20 @@ pub struct SentryConfig {
 impl Config {
     pub fn new<S: AsRef<str>>(path: S) -> Self {
         match crystalsoft_utils::read_file_string(path.as_ref()) {
-            Ok(configuration) => toml::from_str(
-                &envsubst::substitute(configuration, &env::vars().collect()).unwrap(),
-            )
-            .unwrap(),
-            Err(e) => panic!("Couldn't open {} file: {:#?}", path.as_ref(), e),
+            Ok(configuration) => {
+                info!("\"{}\" loaded correctly.", path.as_ref());
+
+                let configuration =
+                    envsubst::substitute(configuration, &env::vars().collect()).unwrap();
+
+                toml::from_str(&configuration).unwrap_or_else(|e| {
+                    panic!(
+                        "Error {:#?} loading this configuration: {:#?}",
+                        e, configuration
+                    )
+                })
+            }
+            Err(e) => panic!("Couldn't open \"{}\", error: {:#?}", path.as_ref(), e),
         }
     }
 }
