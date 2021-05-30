@@ -1,15 +1,11 @@
 use async_std::sync::Arc;
 
-use mongodb::error::Error as MongoError;
-
 use crate::file::FileProvider;
 use crate::mongo::models::document::Document;
 use crate::mongo::wrapper::MongoWrapper;
+use crate::mongo::Error;
 
-pub enum DataResult {
-    Ok,
-    Error(MongoError),
-}
+pub type DataResult<T> = Result<T, Error>;
 
 #[derive(Clone)]
 pub struct Data {
@@ -53,10 +49,9 @@ impl Data {
         }
     }
 
-    pub async fn create_document(&self, document: Document) -> DataResult {
-        match self.mongo.create::<Document>(document).await {
-            Ok(_) => DataResult::Ok,
-            Err(e) => DataResult::Error(e),
-        }
+    pub async fn create_document(&self, document: Document) -> DataResult<()> {
+        self.mongo.create::<Document>(document).await?;
+
+        Ok(())
     }
 }

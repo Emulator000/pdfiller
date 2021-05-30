@@ -1,5 +1,6 @@
 use std::env;
 
+use log::info;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]

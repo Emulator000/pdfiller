@@ -1,10 +1,3 @@
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate bson;
-#[macro_use]
-extern crate log;
-
 mod client;
 mod config;
 mod data;
@@ -15,12 +8,6 @@ mod utils;
 
 use std::io::Write;
 
-use env_logger::Env;
-
-use clap::{App as ClapApp, Arg};
-
-use chrono::Local as ChronoLocal;
-
 use actix_web::{
     middleware::{
         normalize::{NormalizePath, TrailingSlash},
@@ -28,6 +15,10 @@ use actix_web::{
     },
     web, App, HttpServer,
 };
+use chrono::Local as ChronoLocal;
+use clap::{App as ClapApp, Arg};
+use env_logger::Env;
+use log::info;
 
 use crate::config::Config;
 use crate::data::Data;

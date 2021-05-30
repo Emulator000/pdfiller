@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::str;
 
 use async_std::sync::Arc;
-
+use log::info;
 use lopdf::{Dictionary, Document as PdfDocument, Object, ObjectId};
 
 use crate::file::FileProvider;

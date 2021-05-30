@@ -31,7 +31,7 @@ sentry = "^0.21"
 sanitize-filename = "^0.3"
 uuid = { version = "0.8", features = ["v4"] }
 linked-hash-map = "^0.5"
-simple-cache = "^0.1"
+simple-cache = "^0.2"
 regex = "^1.4"
 crystalsoft-utils = "^0.1"
 mime = "^0.3"

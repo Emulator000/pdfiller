@@ -4,6 +4,7 @@ mod filler;
 use actix_web::dev::BodyEncoding;
 use actix_web::http::{header::ACCEPT, ContentEncoding};
 use actix_web::{web, HttpResponse};
+use serde::Serialize;
 
 use crate::services::filler::compiler;
 

@@ -1,7 +1,5 @@
-use mongodb::error::Error;
-
 use crate::mongo::models::Model;
-use crate::mongo::MongoDB;
+use crate::mongo::{Error, MongoDB};
 
 #[derive(Clone)]
 pub struct MongoWrapper {

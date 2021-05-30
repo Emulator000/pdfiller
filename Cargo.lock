@@ -335,12 +335,6 @@ dependencies = [
 
 [[package]]
 name = "arc-swap"
-version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dabe5a181f83789739c194cbe5a897dde195078fac08568d09221fd6137a7ba8"
-
-[[package]]
-name = "arc-swap"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e906254e445520903e7fc9da4f709886c84ae4bc4ddaf0e093188d66df4dc820"
@@ -2425,7 +2419,7 @@ dependencies = [
  "actix-multipart",
  "actix-rt",
  "actix-web",
- "arc-swap 1.3.0",
+ "arc-swap",
  "async-std",
  "async-trait",
  "bson",
@@ -3304,12 +3298,11 @@ checksum = "2a30f10c911c0355f80f1c2faa8096efc4a58cdf8590b954d5b395efa071c711"
 
 [[package]]
 name = "simple-cache"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f74fc9841c589d7ebeb04952ae6e627cd2b4a37521f2a609eb9298e85e9fec17"
+checksum = "7c9b6fe3e0e7a5a54045417d1195e7f7e239805b64fed52db935413aa19a708f"
 dependencies = [
- "arc-swap 0.4.8",
- "async-std",
+ "arc-swap",
 ]
 
 [[package]]

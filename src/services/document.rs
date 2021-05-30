@@ -1,9 +1,9 @@
 use actix_multipart::{Field, Multipart, MultipartError};
 use actix_web::{get, post, web, HttpResponse, Responder};
-
 use futures_lite::stream::StreamExt;
+use serde::Deserialize;
 
-use crate::data::{Data, DataResult};
+use crate::data::Data;
 use crate::file::FileResult;
 use crate::mongo::models::document::Document;
 use crate::services::{self, filler::compiler, WsError};
@@ -122,8 +122,8 @@ pub async fn post_document(
     } else if let Some(file) = filepath {
         let document = Document::new(token.0, file);
         match data.create_document(document.clone()).await {
-            DataResult::Ok => HttpResponse::Created().json(document),
-            DataResult::Error(e) => HttpResponse::InternalServerError().json(WsError {
+            Ok(_) => HttpResponse::Created().json(document),
+            Err(e) => HttpResponse::InternalServerError().json(WsError {
                 error: format!("An error occurred: {:#?}", e),
             }),
         }
